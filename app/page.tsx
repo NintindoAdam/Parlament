@@ -43,6 +43,7 @@ export default function HomePage() {
         width={layout.width}
         height={layout.height}
         seatRadius={layout.seatRadius}
+        hitRadius={layout.hitRadius}
         seats={seats}
         clubs={clubs}
       />

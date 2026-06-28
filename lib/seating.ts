@@ -1,53 +1,45 @@
 import type { SeatLayout, SeatPosition } from './types'
 
+const INNER_RADIUS = 168
+const OUTER_RADIUS = 480
+const PAD_X = 30
+const PAD_TOP = 28
+const PAD_BOTTOM = 30
+
 /**
  * Generuje pozycje miejsc w półokręgu (hemicykl) dla `n` mandatów.
  *
  * Algorytm „parliament arch": miejsca rozkładane są na współśrodkowych łukach
  * (rzędach) wewnątrz półokręgu 180°. Liczba miejsc w rzędzie jest proporcjonalna
- * do jego promienia, dzięki czemu odstępy między miejscami są zbliżone w całej
- * sali. Miejsca zwracane są w kolejności „czytania" sali: rzędami, a w obrębie
- * rzędu od lewej (kąt = π) do prawej (kąt = 0). To pozwala wypełniać je kolejno
- * posłami posortowanymi wg sceny politycznej, tworząc spójne bloki klubów.
+ * do jego promienia. Liczbę rzędów dobieramy tak, by „komórka" przypadająca na
+ * jedno miejsce (mniejszy z odstępów: między rzędami i wzdłuż łuku) była jak
+ * największa — dzięki temu miejsca nie nachodzą na siebie i mają wyraźne luki.
+ *
+ * Miejsca zwracane są w kolejności „czytania" sali: od lewej (kąt = π) do prawej
+ * (kąt = 0), co pozwala wypełniać je posłami posortowanymi wg sceny politycznej.
  */
 export function computeHemicycle(n: number): SeatLayout {
-  const width = 1000
-  const outerRadius = 470
-  const innerRadius = 190
-  const cx = width / 2
-  const cy = outerRadius + 24 // odrobina marginesu u góry
+  const cx = OUTER_RADIUS + PAD_X
+  const cy = OUTER_RADIUS + PAD_TOP
+  const width = cx * 2
+  const height = cy + PAD_BOTTOM
 
   if (n <= 0) {
-    return { width, height: cy + 40, seatRadius: 12, seats: [] }
+    return { width, height, seatRadius: 10, hitRadius: 14, seats: [] }
   }
 
-  const rows = chooseRowCount(n, innerRadius, outerRadius)
-  const radii: number[] = []
-  for (let i = 0; i < rows; i++) {
-    radii.push(rows === 1 ? innerRadius : innerRadius + ((outerRadius - innerRadius) * i) / (rows - 1))
-  }
+  const rows = chooseRowCount(n)
+  const { radii, counts, cell } = rowStats(n, rows)
 
-  // Liczba miejsc na rząd proporcjonalna do promienia.
-  const radiusSum = radii.reduce((a, b) => a + b, 0)
-  const counts = radii.map((r) => Math.max(1, Math.round((n * r) / radiusSum)))
-
-  // Korekta zaokrągleń tak, aby suma == n (dodajemy/odejmujemy od najszerszych rzędów).
-  fixRounding(counts, radii, n)
-
-  // Promień pojedynczego miejsca: dopasowany do najgęstszego rzędu, by się nie nakładały.
-  const minGap = radii.reduce((min, r, i) => {
-    const c = counts[i]
-    const gap = c > 1 ? (Math.PI * r) / (c - 1) : Math.PI * r
-    return Math.min(min, gap)
-  }, Infinity)
-  const seatRadius = Math.max(6, Math.min(18, (minGap / 2) * 0.82))
+  // Wizualny rozmiar miejsca = 60% komórki (luki ~40%); obszar najazdu ≈ cała komórka.
+  const seatRadius = Math.max(4, (cell / 2) * 0.6)
+  const hitRadius = Math.max(seatRadius, (cell / 2) * 0.96)
 
   const seats: SeatPosition[] = []
   for (let i = 0; i < rows; i++) {
     const r = radii[i]
     const c = counts[i]
     for (let j = 0; j < c; j++) {
-      // Kąt od π (lewa strona) do 0 (prawa). Dla rzędu z jednym miejscem -> środek.
       const t = c === 1 ? 0.5 : j / (c - 1)
       const angle = Math.PI - t * Math.PI
       const x = cx + r * Math.cos(angle)
@@ -56,44 +48,60 @@ export function computeHemicycle(n: number): SeatLayout {
     }
   }
 
-  // Sortowanie do kolejności wypełniania: po kącie (lewo→prawo), a przy zbliżonym
-  // kącie od rzędu zewnętrznego do wewnętrznego — tworzy czyste, pionowe „kliny"
-  // klubów, jak w realnej sali sejmowej.
+  // Kolejność wypełniania: po kącie (lewo→prawo), przy zbliżonym kącie od rzędu
+  // zewnętrznego do wewnętrznego — tworzy spójne, pionowe „kliny" klubów.
   seats.sort((a, b) => {
     if (Math.abs(a.angle - b.angle) > 1e-6) return b.angle - a.angle
     return b.row - a.row
   })
 
-  const height = cy + 30
-  return { width, height, seatRadius, seats }
+  return { width, height, seatRadius, hitRadius, seats }
 }
 
-/** Najmniejsza liczba rzędów, przy której miejsca nie są nadmiernie ściśnięte. */
-function chooseRowCount(n: number, innerRadius: number, outerRadius: number): number {
-  const minSeatGap = 30 // minimalny odstęp środków miejsc wzdłuż łuku [px]
-  for (let rows = 1; rows <= 40; rows++) {
-    const radii: number[] = []
-    for (let i = 0; i < rows; i++) {
-      radii.push(rows === 1 ? innerRadius : innerRadius + ((outerRadius - innerRadius) * i) / (rows - 1))
-    }
-    const radiusSum = radii.reduce((a, b) => a + b, 0)
-    const counts = radii.map((r) => Math.max(1, Math.round((n * r) / radiusSum)))
-    fixRounding(counts, radii, n)
-    const fits = radii.every((r, i) => {
-      const c = counts[i]
-      if (c <= 1) return true
-      return (Math.PI * r) / (c - 1) >= minSeatGap
-    })
-    if (fits) return rows
+interface RowStats {
+  radii: number[]
+  counts: number[]
+  /** Najmniejszy z odstępów (radialny / wzdłuż łuku) przypadający na miejsce. */
+  cell: number
+}
+
+function rowStats(n: number, rows: number): RowStats {
+  const radii: number[] = []
+  for (let i = 0; i < rows; i++) {
+    radii.push(rows === 1 ? INNER_RADIUS : INNER_RADIUS + ((OUTER_RADIUS - INNER_RADIUS) * i) / (rows - 1))
   }
-  return 14
+  const radiusSum = radii.reduce((a, b) => a + b, 0)
+  const counts = radii.map((r) => Math.max(1, Math.round((n * r) / radiusSum)))
+  fixRounding(counts, radii, n)
+
+  const rowSpacing = rows > 1 ? (OUTER_RADIUS - INNER_RADIUS) / (rows - 1) : INNER_RADIUS
+  const minAngularGap = radii.reduce((min, r, i) => {
+    const c = counts[i]
+    const gap = c > 1 ? (Math.PI * r) / (c - 1) : Math.PI * r
+    return Math.min(min, gap)
+  }, Infinity)
+  const cell = Math.min(rowSpacing, minAngularGap)
+  return { radii, counts, cell }
+}
+
+/** Dobiera liczbę rzędów maksymalizującą rozmiar komórki (najlepsze odstępy). */
+function chooseRowCount(n: number): number {
+  let bestRows = 8
+  let bestCell = -1
+  for (let rows = 6; rows <= 22; rows++) {
+    const { cell } = rowStats(n, rows)
+    if (cell > bestCell) {
+      bestCell = cell
+      bestRows = rows
+    }
+  }
+  return bestRows
 }
 
 /** Dostraja sumę `counts` do `target`, zmieniając najszersze rzędy. */
 function fixRounding(counts: number[], radii: number[], target: number): void {
   let diff = target - counts.reduce((a, b) => a + b, 0)
-  // Indeksy rzędów posortowane wg promienia malejąco (najwięcej miejsca = pierwszy).
-  const byRadius = radii.map((r, i) => i).sort((a, b) => radii[b] - radii[a])
+  const byRadius = radii.map((_, i) => i).sort((a, b) => radii[b] - radii[a])
   let k = 0
   while (diff !== 0 && byRadius.length > 0) {
     const idx = byRadius[k % byRadius.length]

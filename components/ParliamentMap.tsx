@@ -10,11 +10,12 @@ interface ParliamentMapProps {
   width: number
   height: number
   seatRadius: number
+  hitRadius: number
   seats: SeatDatum[]
   clubs: ClubCount[]
 }
 
-export function ParliamentMap({ width, height, seatRadius, seats, clubs }: ParliamentMapProps) {
+export function ParliamentMap({ width, height, seatRadius, hitRadius, seats, clubs }: ParliamentMapProps) {
   const router = useRouter()
   const [hoveredId, setHoveredId] = useState<number | null>(null)
   const [selected, setSelected] = useState<SeatDatum | null>(null)
@@ -60,36 +61,47 @@ export function ParliamentMap({ width, height, seatRadius, seats, clubs }: Parli
           {seats.map((s) => {
             const isHovered = hoveredId === s.id
             const isDimmed = activeClub !== null && s.club !== activeClub
-            const r = isHovered ? seatRadius * 1.55 : seatRadius
+            const r = isHovered ? seatRadius * 1.5 : seatRadius
             return (
-              <rect
-                key={s.id}
-                x={s.x - r}
-                y={s.y - r}
-                width={r * 2}
-                height={r * 2}
-                rx={r * 0.34}
-                fill={s.color}
-                tabIndex={0}
-                role="link"
-                aria-label={`${s.name}, ${s.clubName}`}
-                onMouseEnter={() => setHoveredId(s.id)}
-                onFocus={() => setHoveredId(s.id)}
-                onClick={() => activate(s)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    activate(s)
-                  }
-                }}
-                className="cursor-pointer outline-none transition-[opacity] duration-150 focus-visible:ring"
-                style={{
-                  opacity: isDimmed ? 0.22 : 1,
-                  stroke: isHovered ? '#0f172a' : 'rgba(15,23,42,0.18)',
-                  strokeWidth: isHovered ? 1.6 : 0.6,
-                  filter: isHovered ? 'drop-shadow(0 2px 6px rgba(15,23,42,0.35))' : undefined,
-                }}
-              />
+              <g key={s.id}>
+                {/* Widoczny kwadracik (mniejszy, z luką) — bez obsługi zdarzeń. */}
+                <rect
+                  x={s.x - r}
+                  y={s.y - r}
+                  width={r * 2}
+                  height={r * 2}
+                  rx={r * 0.34}
+                  fill={s.color}
+                  className="pointer-events-none transition-all duration-150"
+                  style={{
+                    opacity: isDimmed ? 0.2 : 1,
+                    stroke: isHovered ? '#0f172a' : 'rgba(15,23,42,0.16)',
+                    strokeWidth: isHovered ? 1.6 : 0.5,
+                    filter: isHovered ? 'drop-shadow(0 2px 7px rgba(15,23,42,0.4))' : undefined,
+                  }}
+                />
+                {/* Niewidzialny, większy obszar najazdu/kliknięcia (cała komórka). */}
+                <rect
+                  x={s.x - hitRadius}
+                  y={s.y - hitRadius}
+                  width={hitRadius * 2}
+                  height={hitRadius * 2}
+                  fill="transparent"
+                  tabIndex={0}
+                  role="link"
+                  aria-label={`${s.name}, ${s.clubName}`}
+                  onMouseEnter={() => setHoveredId(s.id)}
+                  onFocus={() => setHoveredId(s.id)}
+                  onClick={() => activate(s)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      activate(s)
+                    }
+                  }}
+                  className="cursor-pointer outline-none focus-visible:ring"
+                />
+              </g>
             )
           })}
         </svg>

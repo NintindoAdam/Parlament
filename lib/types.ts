@@ -56,7 +56,10 @@ export interface SeatPosition {
 export interface SeatLayout {
   width: number
   height: number
+  /** Wizualny promień miejsca (mniejszy — z luką). */
   seatRadius: number
+  /** Promień obszaru najazdu/kliknięcia (większy, ≈ cała komórka). */
+  hitRadius: number
   seats: SeatPosition[]
 }
 
