@@ -39,6 +39,10 @@ jobs:
         uses: actions/configure-pages@v5
         with:
           static_site_generator: next
+          # Włącza/przełącza Pages na tryb „GitHub Actions" automatycznie przez API
+          # (wymaga uprawnienia pages: write). Dzięki temu nie trzeba ręcznie zmieniać
+          # źródła w ustawieniach repozytorium — to naprawia problem z README na stronie.
+          enablement: true
 
       - name: Instalacja zależności
         run: npm ci
