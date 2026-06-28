@@ -48,6 +48,19 @@ jobs:
       - name: Instalacja zależności
         run: npm ci
 
+      # Zdjęcia i biografie zmieniają się rzadko — cache'ujemy je, by kolejne
+      # deploye nie pobierały od nowa ~500 zdjęć (skrypt sync pomija istniejące pliki).
+      - name: Cache zdjęć i biografii
+        uses: actions/cache@v4
+        with:
+          path: |
+            public/photos
+            public/photos-mini
+            data/wiki
+          key: sejm-assets-term10-${{ github.run_id }}
+          restore-keys: |
+            sejm-assets-term10-
+
       - name: Synchronizacja danych z API Sejmu (+ zdjęcia, Wikipedia)
         run: npm run sync
         env:
