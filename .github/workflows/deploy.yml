@@ -1,0 +1,70 @@
+name: Deploy do GitHub Pages
+
+# Przy każdym pushu: pobierz świeże dane z API Sejmu, zbuduj statyczną stronę i
+# opublikuj ją na GitHub Pages. Krok „Synchronizacja" jest jednocześnie testem
+# dostępności API — jeśli zakończy się błędem, zobaczysz to w logach Akcji.
+
+on:
+  push:
+    branches:
+      - main
+      - claude/parliament-seating-map-taz3k0
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Pozwól na jeden równoległy deploy; nie przerywaj trwającego.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Konfiguracja GitHub Pages
+        id: pages
+        uses: actions/configure-pages@v5
+        with:
+          static_site_generator: next
+
+      - name: Instalacja zależności
+        run: npm ci
+
+      - name: Synchronizacja danych z API Sejmu (+ zdjęcia, Wikipedia)
+        run: npm run sync
+        env:
+          SEJM_TERM: '10'
+
+      - name: Build (statyczny eksport)
+        run: npm run build
+        env:
+          NEXT_PUBLIC_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+
+      - name: Upload artefaktu
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy na GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

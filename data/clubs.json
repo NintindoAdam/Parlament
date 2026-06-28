@@ -1,0 +1,79 @@
+[
+  {
+    "code": "Lewica",
+    "name": "Lewica",
+    "color": "#e11d48",
+    "order": 1,
+    "count": 21
+  },
+  {
+    "code": "Razem",
+    "name": "Razem",
+    "color": "#9f1239",
+    "order": 2,
+    "count": 4
+  },
+  {
+    "code": "KO",
+    "name": "Koalicja Obywatelska",
+    "color": "#f97316",
+    "order": 3,
+    "count": 156
+  },
+  {
+    "code": "Polska2050-TD",
+    "name": "Polska 2050 (Trzecia Droga)",
+    "color": "#facc15",
+    "order": 4,
+    "count": 15
+  },
+  {
+    "code": "PSL-TD",
+    "name": "PSL – Trzecia Droga",
+    "color": "#16a34a",
+    "order": 5,
+    "count": 32
+  },
+  {
+    "code": "Demokracja",
+    "name": "Demokracja",
+    "color": "#0ea5e9",
+    "order": 6,
+    "count": 4
+  },
+  {
+    "code": "Centrum",
+    "name": "Centrum",
+    "color": "#14b8a6",
+    "order": 7,
+    "count": 11
+  },
+  {
+    "code": "PiS",
+    "name": "Prawo i Sprawiedliwość",
+    "color": "#2563eb",
+    "order": 8,
+    "count": 186
+  },
+  {
+    "code": "Konfederacja",
+    "name": "Konfederacja",
+    "color": "#78350f",
+    "order": 9,
+    "count": 16
+  },
+  {
+    "code": "KonfederacjaKP",
+    "name": "Konfederacja Korony Polskiej",
+    "color": "#b45309",
+    "order": 10,
+    "count": 3
+  },
+  {
+    "code": "niez.",
+    "name": "Niezrzeszeni",
+    "color": "#94a3b8",
+    "order": 11,
+    "count": 12
+  }
+]

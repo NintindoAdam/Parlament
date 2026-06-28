@@ -1,0 +1,83 @@
+export interface MP {
+  id: number
+  firstName: string
+  lastName: string
+  /** Pełne imię i nazwisko w mianowniku. */
+  name: string
+  /** Kod klubu/koła (znormalizowany). */
+  club: string
+  districtName: string
+  districtNum: number | null
+  voivodeship: string
+  profession: string
+  birthDate: string | null
+  birthLocation: string
+  educationLevel: string
+  email: string
+  numberOfVotes: number | null
+  active: boolean
+  /** Czy w `public/photos/{id}.jpg` jest dostępne zdjęcie. */
+  hasPhoto: boolean
+}
+
+export interface WikiInfo {
+  extract: string
+  url: string
+}
+
+export interface ClubMeta {
+  code: string
+  name: string
+  color: string
+  /** Pozycja na osi lewica → prawica (mniejsza = bardziej na lewo). */
+  order: number
+}
+
+export interface ClubCount extends ClubMeta {
+  count: number
+}
+
+export interface DataMeta {
+  /** true = dane demonstracyjne (seed), false = realne z API Sejmu. */
+  placeholder: boolean
+  generatedAt: string
+  term: number
+  /** Data „stanu na” prezentowana w nagłówku. */
+  asOf: string
+}
+
+export interface SeatPosition {
+  x: number
+  y: number
+  angle: number
+  row: number
+}
+
+export interface SeatLayout {
+  width: number
+  height: number
+  seatRadius: number
+  seats: SeatPosition[]
+}
+
+export interface SeatedMP {
+  mp: MP
+  seat: SeatPosition
+  index: number
+}
+
+/** Lekki, serializowalny obiekt miejsca przekazywany do komponentów klienckich. */
+export interface SeatDatum {
+  id: number
+  name: string
+  club: string
+  clubName: string
+  color: string
+  district: string
+  districtNum: number | null
+  voivodeship: string
+  profession: string
+  hasPhoto: boolean
+  x: number
+  y: number
+}
