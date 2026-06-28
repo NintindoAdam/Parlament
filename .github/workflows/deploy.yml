@@ -38,11 +38,12 @@ jobs:
         id: pages
         uses: actions/configure-pages@v5
         with:
-          static_site_generator: next
           # Włącza/przełącza Pages na tryb „GitHub Actions" automatycznie przez API
           # (wymaga uprawnienia pages: write). Dzięki temu nie trzeba ręcznie zmieniać
           # źródła w ustawieniach repozytorium — to naprawia problem z README na stronie.
           enablement: true
+          # UWAGA: świadomie NIE używamy `static_site_generator: next`, bo ta opcja
+          # przepisuje next.config i psuje plik .mjs. basePath ustawiamy ręcznie poniżej.
 
       - name: Instalacja zależności
         run: npm ci
@@ -55,7 +56,8 @@ jobs:
       - name: Build (statyczny eksport)
         run: npm run build
         env:
-          NEXT_PUBLIC_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+          # Na GitHub Pages strona projektu jest serwowana spod „/<nazwa-repo>/".
+          NEXT_PUBLIC_BASE_PATH: /${{ github.event.repository.name }}
 
       - name: Upload artefaktu
         uses: actions/upload-pages-artifact@v3

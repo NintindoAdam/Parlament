@@ -49,8 +49,14 @@ export function getMeta(): DataMeta {
   return load().meta
 }
 
+/** Posłowie z aktualnie aktywnym mandatem (API zwraca też byłych z całej kadencji). */
+function getActiveMPs(): MP[] {
+  return load().mps.filter((m) => m.active)
+}
+
 export function getClubCounts(): ClubCount[] {
-  return load().clubs
+  // Liczymy tylko aktywne mandaty, aby suma odpowiadała 460 obecnym posłom.
+  return buildClubCounts(getActiveMPs())
 }
 
 export function getAllMPs(): MP[] {
@@ -61,9 +67,9 @@ export function getMP(id: number): MP | undefined {
   return load().mps.find((m) => m.id === id)
 }
 
-/** Posłowie posortowani wg sceny politycznej, a w obrębie klubu alfabetycznie. */
+/** Aktywni posłowie posortowani wg sceny politycznej, a w obrębie klubu alfabetycznie. */
 export function getOrderedMPs(): MP[] {
-  return [...load().mps].sort((a, b) => {
+  return [...getActiveMPs()].sort((a, b) => {
     const byClub = clubOrder(a.club) - clubOrder(b.club)
     if (byClub !== 0) return byClub
     return a.lastName.localeCompare(b.lastName, 'pl')
