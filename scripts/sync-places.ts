@@ -85,16 +85,23 @@ async function apiJson(url: string): Promise<{ data?: ApiItem[] }> {
   return (await res.json()) as { data?: ApiItem[] }
 }
 
+/** API /search zwraca tytuły z tagami podświetlenia (<mark>…</mark>) — zdejmujemy je. */
+function stripTags(s: string | undefined): string {
+  return (s ?? '').replace(/<[^>]+>/g, '')
+}
+
 function titleMatches(title: string | undefined): boolean {
-  const n = normalizePlace(title ?? '')
+  const n = normalizePlace(stripTags(title))
   return n.includes('urzedowych nazw miejscowosci')
 }
 
 function logTitles(label: string, items: ApiItem[]): void {
-  console.log(
-    `  [${label}] ${items.length} wyników: ` +
-      items.slice(0, 6).map((d) => `„${(d.attributes?.title ?? '?').slice(0, 70)}"`).join('; ')
-  )
+  const entries = items.slice(0, 6).map((d) => {
+    const title = stripTags(d.attributes?.title) || '?'
+    const kind = d.type ?? d.attributes?.model ?? '?'
+    return `„${title.slice(0, 70)}" [${kind}]`
+  })
+  console.log(`  [${label}] ${items.length} wyników: ${entries.join('; ')}`)
 }
 
 function pickCsv(items: ApiItem[]): { url: string; title: string; date: string } | null {
@@ -106,7 +113,12 @@ function pickCsv(items: ApiItem[]): { url: string; title: string; date: string }
       date: r.attributes?.data_date || r.attributes?.verified || r.attributes?.created || '',
     }))
     .filter((r) => r.url && (r.format === 'csv' || r.url.toLowerCase().includes('.csv')))
-    .sort((a, b) => b.date.localeCompare(a.date))
+    .map((r) => ({
+      ...r,
+      // Bezpośrednie linki plikowe przed odnośnikami do stron portalu.
+      direct: r.url.toLowerCase().includes('.csv') || r.url.includes('/media/') ? 1 : 0,
+    }))
+    .sort((a, b) => b.direct - a.direct || b.date.localeCompare(a.date))
   return candidates[0] ?? null
 }
 
@@ -126,15 +138,15 @@ async function discoverCsvUrl(): Promise<string> {
     const items = body.data ?? []
     logTitles('search', items)
     const matching = items.filter((d) => titleMatches(d.attributes?.title))
+    // Najpierw zbiór danych — jego zasoby mają wiarygodne file_url.
+    const dataset = matching.find((d) => (d.type ?? d.attributes?.model) === 'dataset')
+    if (dataset) return await csvFromDataset(API, dataset)
     const resources = matching.filter((d) => (d.type ?? d.attributes?.model) === 'resource')
     const csv = pickCsv(resources)
     if (csv) {
-      console.log(`  Zasób CSV (search): „${csv.title}" (${csv.date})`)
+      console.log(`  Zasób CSV (search): „${stripTags(csv.title)}" (${csv.date})`)
       return csv.url
     }
-    // Może znalazł się zbiór danych — zejdź do jego zasobów.
-    const dataset = matching.find((d) => (d.type ?? d.attributes?.model) === 'dataset')
-    if (dataset) return await csvFromDataset(API, dataset)
     errors.push('search: brak pasującego zasobu/zbioru')
   } catch (e) {
     errors.push(`search: ${(e as Error).message}`)
