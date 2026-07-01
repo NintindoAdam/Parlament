@@ -63,49 +63,110 @@ async function fetchWithTimeout(url: string, ms: number): Promise<Response> {
   }
 }
 
-/** Znajduje najnowszy zasób CSV wykazu miejscowości przez API dane.gov.pl. */
-async function discoverCsvUrl(): Promise<string> {
-  const q = encodeURIComponent('wykaz urzędowych nazw miejscowości')
-  const res = await fetchWithTimeout(`https://api.dane.gov.pl/1.4/datasets?q=${q}&per_page=10`, 30000)
-  if (!res.ok) throw new Error(`discovery datasets: HTTP ${res.status}`)
-  const body = (await res.json()) as { data?: { id: string; attributes?: { title?: string } }[] }
-  const dataset = (body.data ?? []).find((d) =>
-    normalizePlace(d.attributes?.title ?? '').includes('wykaz urzedowych nazw miejscowosci')
-  )
-  if (!dataset) throw new Error('discovery: nie znaleziono zbioru „Wykaz urzędowych nazw miejscowości"')
-  console.log(`  Zbiór danych: ${dataset.attributes?.title} (id ${dataset.id})`)
-
-  const rRes = await fetchWithTimeout(
-    `https://api.dane.gov.pl/1.4/datasets/${dataset.id}/resources?per_page=100`,
-    30000
-  )
-  if (!rRes.ok) throw new Error(`discovery resources: HTTP ${rRes.status}`)
-  const rBody = (await rRes.json()) as {
-    data?: {
-      id: string
-      attributes?: {
-        title?: string
-        format?: string
-        file_url?: string
-        link?: string
-        download_url?: string
-        created?: string
-        data_date?: string
-      }
-    }[]
+interface ApiItem {
+  id: string
+  type?: string
+  attributes?: {
+    title?: string
+    model?: string
+    format?: string
+    file_url?: string
+    link?: string
+    download_url?: string
+    created?: string
+    data_date?: string
+    verified?: string
   }
-  const candidates = (rBody.data ?? [])
+}
+
+async function apiJson(url: string): Promise<{ data?: ApiItem[] }> {
+  const res = await fetchWithTimeout(url, 30000)
+  if (!res.ok) throw new Error(`HTTP ${res.status} dla ${url}`)
+  return (await res.json()) as { data?: ApiItem[] }
+}
+
+function titleMatches(title: string | undefined): boolean {
+  const n = normalizePlace(title ?? '')
+  return n.includes('urzedowych nazw miejscowosci')
+}
+
+function logTitles(label: string, items: ApiItem[]): void {
+  console.log(
+    `  [${label}] ${items.length} wyników: ` +
+      items.slice(0, 6).map((d) => `„${(d.attributes?.title ?? '?').slice(0, 70)}"`).join('; ')
+  )
+}
+
+function pickCsv(items: ApiItem[]): { url: string; title: string; date: string } | null {
+  const candidates = items
     .map((r) => ({
       url: r.attributes?.file_url || r.attributes?.download_url || r.attributes?.link || '',
       format: (r.attributes?.format ?? '').toLowerCase(),
       title: r.attributes?.title ?? '',
-      date: r.attributes?.data_date || r.attributes?.created || '',
+      date: r.attributes?.data_date || r.attributes?.verified || r.attributes?.created || '',
     }))
     .filter((r) => r.url && (r.format === 'csv' || r.url.toLowerCase().includes('.csv')))
     .sort((a, b) => b.date.localeCompare(a.date))
-  if (candidates.length === 0) throw new Error('discovery: brak zasobów CSV w zbiorze')
-  console.log(`  Zasób CSV: „${candidates[0].title}" (${candidates[0].date})`)
-  return candidates[0].url
+  return candidates[0] ?? null
+}
+
+/**
+ * Znajduje najnowszy zasób CSV wykazu miejscowości przez API dane.gov.pl,
+ * próbując kolejno kilku endpointów (loguje, co zwróciło każde podejście —
+ * przy zmianach API log CI od razu pokazuje przyczynę).
+ */
+async function discoverCsvUrl(): Promise<string> {
+  const API = 'https://api.dane.gov.pl/1.4'
+  const q = encodeURIComponent('wykaz urzędowych nazw miejscowości')
+  const errors: string[] = []
+
+  // Strategia 1: pełnotekstowe /search po zasobach (CSV bezpośrednio).
+  try {
+    const body = await apiJson(`${API}/search?q=${q}&per_page=40`)
+    const items = body.data ?? []
+    logTitles('search', items)
+    const matching = items.filter((d) => titleMatches(d.attributes?.title))
+    const resources = matching.filter((d) => (d.type ?? d.attributes?.model) === 'resource')
+    const csv = pickCsv(resources)
+    if (csv) {
+      console.log(`  Zasób CSV (search): „${csv.title}" (${csv.date})`)
+      return csv.url
+    }
+    // Może znalazł się zbiór danych — zejdź do jego zasobów.
+    const dataset = matching.find((d) => (d.type ?? d.attributes?.model) === 'dataset')
+    if (dataset) return await csvFromDataset(API, dataset)
+    errors.push('search: brak pasującego zasobu/zbioru')
+  } catch (e) {
+    errors.push(`search: ${(e as Error).message}`)
+  }
+
+  // Strategia 2: lista zbiorów z parametrem q.
+  try {
+    const body = await apiJson(`${API}/datasets?q=${q}&per_page=40`)
+    const items = body.data ?? []
+    logTitles('datasets', items)
+    const dataset = items.find((d) => titleMatches(d.attributes?.title))
+    if (dataset) return await csvFromDataset(API, dataset)
+    errors.push('datasets: brak pasującego zbioru')
+  } catch (e) {
+    errors.push(`datasets: ${(e as Error).message}`)
+  }
+
+  throw new Error(
+    `nie znaleziono zbioru „Wykaz urzędowych nazw miejscowości" (${errors.join(' | ')}). ` +
+      'Można wskazać plik ręcznie przez env PLACES_CSV_URL.'
+  )
+}
+
+async function csvFromDataset(API: string, dataset: ApiItem): Promise<string> {
+  console.log(`  Zbiór danych: ${dataset.attributes?.title} (id ${dataset.id})`)
+  const rBody = await apiJson(`${API}/datasets/${dataset.id}/resources?per_page=100`)
+  const items = rBody.data ?? []
+  logTitles('resources', items)
+  const csv = pickCsv(items)
+  if (!csv) throw new Error('brak zasobów CSV w zbiorze')
+  console.log(`  Zasób CSV: „${csv.title}" (${csv.date})`)
+  return csv.url
 }
 
 async function obtainCsv(): Promise<string> {
