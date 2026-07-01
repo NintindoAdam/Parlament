@@ -16,6 +16,7 @@
 import { promises as fs } from 'fs'
 import { existsSync, readFileSync } from 'fs'
 import path from 'path'
+import ExcelJS from 'exceljs'
 import { chunkKey, normalizePlace, type PlaceTuple } from '../lib/places'
 
 const ROOT = process.cwd()
@@ -125,8 +126,9 @@ function logResourceDetails(items: ApiItem[]): void {
 }
 
 /**
- * Wybiera najlepszy URL pliku CSV z listy zasobów. Priorytet: oryginalny CSV →
- * automatycznie skonwertowany CSV (csv_file_url, gdy oryginał to XLSX itp.).
+ * Wybiera najlepszy plik danych z listy zasobów. Priorytet formatów:
+ * CSV (oryginał) → skonwertowany CSV (csv_file_url) → XLSX (rejestr publikowany
+ * jest jako XLSX; PDF-y rozporządzeń odpadają na filtrze formatu).
  */
 function pickCsv(items: ApiItem[]): { url: string; title: string; date: string } | null {
   const candidates = items
@@ -135,23 +137,26 @@ function pickCsv(items: ApiItem[]): { url: string; title: string; date: string }
       const format = (a.format ?? '').toLowerCase()
       const original = a.file_url || a.download_url || a.link || ''
       let url = ''
-      let direct = 0
+      let priority = 0
       if (format === 'csv' || original.toLowerCase().includes('.csv')) {
         url = original
-        direct = original.toLowerCase().includes('.csv') || original.includes('/media/') ? 2 : 1
+        priority = 3
       } else if (a.csv_file_url || a.csv_download_url) {
         url = a.csv_file_url || a.csv_download_url || ''
-        direct = 1
+        priority = 2
+      } else if (format === 'xlsx' || format === 'xls' || /\.xlsx?($|\?)/.test(original.toLowerCase())) {
+        url = original
+        priority = 1
       }
       return {
         url,
         title: a.title ?? '',
         date: a.data_date || a.verified || a.created || '',
-        direct,
+        priority,
       }
     })
     .filter((r) => r.url)
-    .sort((a, b) => b.direct - a.direct || b.date.localeCompare(a.date))
+    .sort((a, b) => b.priority - a.priority || b.date.localeCompare(a.date))
   return candidates[0] ?? null
 }
 
@@ -300,6 +305,54 @@ function parseCsv(text: string, delimiter: string): string[][] {
   return rows
 }
 
+// --- Odczyt tabeli (XLSX lub CSV — wykrywanie po sygnaturze pliku) ----------
+
+function cellToString(v: unknown): string {
+  if (v == null) return ''
+  if (typeof v === 'string') return v
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v)
+  if (v instanceof Date) return v.toISOString()
+  const obj = v as { richText?: { text: string }[]; text?: string; result?: unknown; hyperlink?: string }
+  if (obj.richText) return obj.richText.map((t) => t.text).join('')
+  if (typeof obj.text === 'string') return obj.text
+  if (obj.result != null) return cellToString(obj.result)
+  return String(v)
+}
+
+/** Wczytuje tabelę z pliku: XLSX (sygnatura ZIP „PK") lub CSV. */
+async function readTable(filePath: string): Promise<string[][]> {
+  const buf = await fs.readFile(filePath)
+  const isZip = buf.length > 2 && buf[0] === 0x50 && buf[1] === 0x4b
+  if (!isZip) {
+    const text = decodeCsv(buf)
+    const delimiter = text.slice(0, text.indexOf('\n')).includes(';') ? ';' : ','
+    console.log(`→ Parsowanie CSV (separator „${delimiter}").`)
+    return parseCsv(text, delimiter)
+  }
+
+  console.log('→ Parsowanie XLSX…')
+  const wb = new ExcelJS.Workbook()
+  await wb.xlsx.load(buf as unknown as ArrayBuffer)
+  const out: string[][] = []
+  for (const ws of wb.worksheets) {
+    const rows: string[][] = []
+    ws.eachRow({ includeEmpty: false }, (row) => {
+      const values = row.values as unknown[]
+      rows.push(values.slice(1).map(cellToString))
+    })
+    if (rows.length === 0) continue
+    const hasHeader = rows[0].some((h) => normalizePlace(h).includes('nazwa miejscowosci'))
+    console.log(`  Arkusz „${ws.name}": ${rows.length} wierszy${hasHeader ? ' (nagłówek OK)' : ''}`)
+    if (!hasHeader) continue
+    if (out.length === 0) out.push(...rows)
+    else out.push(...rows.slice(1)) // kolejne arkusze bez duplikatu nagłówka
+  }
+  if (out.length === 0) {
+    throw new Error('XLSX: żaden arkusz nie zawiera kolumny „nazwa miejscowości"')
+  }
+  return out
+}
+
 function findColumn(header: string[], ...patterns: ((h: string) => boolean)[]): number {
   for (const pattern of patterns) {
     const idx = header.findIndex((h) => pattern(normalizePlace(h)))
@@ -312,12 +365,10 @@ function findColumn(header: string[], ...patterns: ((h: string) => boolean)[]): 
 
 async function main() {
   const csvPath = await obtainCsv()
-  const raw = decodeCsv(await fs.readFile(csvPath))
-  const delimiter = raw.slice(0, raw.indexOf('\n')).includes(';') ? ';' : ','
-  const rows = parseCsv(raw, delimiter)
-  if (rows.length < 2) throw new Error('CSV bez danych')
+  const rows = await readTable(csvPath)
+  if (rows.length < 2) throw new Error('plik danych bez wierszy')
   const header = rows[0]
-  console.log(`→ Parsowanie CSV: ${rows.length - 1} wierszy, separator „${delimiter}".`)
+  console.log(`→ Wierszy danych: ${rows.length - 1}.`)
 
   const col = {
     name: findColumn(
@@ -329,7 +380,11 @@ async function main() {
     gmina: findColumn(header, (h) => h.includes('gmina') && !h.includes('rodzaj')),
     powiat: findColumn(header, (h) => h.includes('powiat')),
     woj: findColumn(header, (h) => h.includes('wojewodztwo')),
-    parent: findColumn(header, (h) => h.includes('podstawowej')),
+    parent: findColumn(
+      header,
+      (h) => h.includes('nazwa') && h.includes('podstawowej'),
+      (h) => h.includes('podstawowej') && !h.includes('identyfikator')
+    ),
   }
   console.log('  Kolumny:', JSON.stringify(col), '| nagłówek:', header.join(' | '))
   for (const [k, v] of Object.entries(col)) {
