@@ -440,12 +440,18 @@ async function main() {
     return n
   }
 
+  // Znane województwa — wiersze spoza nich to artefakty pliku (powtórzone
+  // nagłówki, wiersze z numeracją kolumn itp.), pomijane z licznikiem.
+  const knownWoj = new Set(OKREGI.powiaty.map((p) => normalizePlace(p.woj)))
+
   const entries: PlaceTuple[] = []
   const seen = new Set<string>()
   const unmatched = new Map<string, number>()
   const usedPowiaty = new Set<string>()
   const typeCounts = new Map<string, number>()
   let unknownType = 0
+  let junkRows = 0
+  const junkSamples: string[] = []
 
   for (let i = 1; i < rows.length; i++) {
     const r = rows[i]
@@ -454,6 +460,11 @@ async function main() {
     const woj = normalizePlace(r[col.woj] ?? '')
     const powiatRaw = (r[col.powiat] ?? '').trim()
     const gmina = (r[col.gmina] ?? '').trim()
+    if (!knownWoj.has(woj)) {
+      junkRows++
+      if (junkSamples.length < 5) junkSamples.push(r.slice(0, 6).join(' | ').slice(0, 120))
+      continue
+    }
     const key = `${woj}|${normPowiat(powiatRaw)}`
     const okreg = powiatMap.get(key)
     if (!okreg) {
@@ -483,6 +494,12 @@ async function main() {
 
   // --- Walidacja (twarda) ---------------------------------------------------
   const problems: string[] = []
+  if (junkRows > 0) {
+    console.log(`  Pominięte wiersze-artefakty: ${junkRows}; próbki: ${junkSamples.join(' ;; ')}`)
+  }
+  if (junkRows > 50) {
+    problems.push(`Zbyt wiele wierszy spoza znanych województw: ${junkRows} (dryf schematu?)`)
+  }
   if (unmatched.size > 0) {
     problems.push(
       `Niezmapowane powiaty (${unmatched.size}): ${[...unmatched.entries()]
