@@ -73,10 +73,18 @@ interface ApiItem {
     file_url?: string
     link?: string
     download_url?: string
+    /** Automatycznie skonwertowany CSV (gdy oryginał to np. XLSX). */
+    csv_file_url?: string
+    csv_download_url?: string
     created?: string
     data_date?: string
     verified?: string
   }
+}
+
+/** Model elementu API: /search zwraca type='common', a właściwy typ w attributes.model. */
+function kindOf(d: ApiItem): string {
+  return d.attributes?.model ?? d.type ?? '?'
 }
 
 async function apiJson(url: string): Promise<{ data?: ApiItem[] }> {
@@ -98,26 +106,51 @@ function titleMatches(title: string | undefined): boolean {
 function logTitles(label: string, items: ApiItem[]): void {
   const entries = items.slice(0, 6).map((d) => {
     const title = stripTags(d.attributes?.title) || '?'
-    const kind = d.type ?? d.attributes?.model ?? '?'
-    return `„${title.slice(0, 70)}" [${kind}]`
+    return `„${title.slice(0, 70)}" [${kindOf(d)}]`
   })
   console.log(`  [${label}] ${items.length} wyników: ${entries.join('; ')}`)
 }
 
+/** Diagnostyka zasobów: format + dostępne pola URL — widoczna w logach CI. */
+function logResourceDetails(items: ApiItem[]): void {
+  for (const r of items.slice(0, 8)) {
+    const a = r.attributes ?? {}
+    const urls = (['file_url', 'csv_file_url', 'download_url', 'link'] as const)
+      .filter((k) => a[k])
+      .join(',')
+    console.log(
+      `    · „${stripTags(a.title).slice(0, 60)}" format=${a.format ?? '?'} urls=[${urls || 'brak'}]`
+    )
+  }
+}
+
+/**
+ * Wybiera najlepszy URL pliku CSV z listy zasobów. Priorytet: oryginalny CSV →
+ * automatycznie skonwertowany CSV (csv_file_url, gdy oryginał to XLSX itp.).
+ */
 function pickCsv(items: ApiItem[]): { url: string; title: string; date: string } | null {
   const candidates = items
-    .map((r) => ({
-      url: r.attributes?.file_url || r.attributes?.download_url || r.attributes?.link || '',
-      format: (r.attributes?.format ?? '').toLowerCase(),
-      title: r.attributes?.title ?? '',
-      date: r.attributes?.data_date || r.attributes?.verified || r.attributes?.created || '',
-    }))
-    .filter((r) => r.url && (r.format === 'csv' || r.url.toLowerCase().includes('.csv')))
-    .map((r) => ({
-      ...r,
-      // Bezpośrednie linki plikowe przed odnośnikami do stron portalu.
-      direct: r.url.toLowerCase().includes('.csv') || r.url.includes('/media/') ? 1 : 0,
-    }))
+    .map((r) => {
+      const a = r.attributes ?? {}
+      const format = (a.format ?? '').toLowerCase()
+      const original = a.file_url || a.download_url || a.link || ''
+      let url = ''
+      let direct = 0
+      if (format === 'csv' || original.toLowerCase().includes('.csv')) {
+        url = original
+        direct = original.toLowerCase().includes('.csv') || original.includes('/media/') ? 2 : 1
+      } else if (a.csv_file_url || a.csv_download_url) {
+        url = a.csv_file_url || a.csv_download_url || ''
+        direct = 1
+      }
+      return {
+        url,
+        title: a.title ?? '',
+        date: a.data_date || a.verified || a.created || '',
+        direct,
+      }
+    })
+    .filter((r) => r.url)
     .sort((a, b) => b.direct - a.direct || b.date.localeCompare(a.date))
   return candidates[0] ?? null
 }
@@ -139,9 +172,9 @@ async function discoverCsvUrl(): Promise<string> {
     logTitles('search', items)
     const matching = items.filter((d) => titleMatches(d.attributes?.title))
     // Najpierw zbiór danych — jego zasoby mają wiarygodne file_url.
-    const dataset = matching.find((d) => (d.type ?? d.attributes?.model) === 'dataset')
+    const dataset = matching.find((d) => kindOf(d) === 'dataset')
     if (dataset) return await csvFromDataset(API, dataset)
-    const resources = matching.filter((d) => (d.type ?? d.attributes?.model) === 'resource')
+    const resources = matching.filter((d) => kindOf(d) === 'resource')
     const csv = pickCsv(resources)
     if (csv) {
       console.log(`  Zasób CSV (search): „${stripTags(csv.title)}" (${csv.date})`)
@@ -171,13 +204,14 @@ async function discoverCsvUrl(): Promise<string> {
 }
 
 async function csvFromDataset(API: string, dataset: ApiItem): Promise<string> {
-  console.log(`  Zbiór danych: ${dataset.attributes?.title} (id ${dataset.id})`)
+  console.log(`  Zbiór danych: ${stripTags(dataset.attributes?.title)} (id ${dataset.id})`)
   const rBody = await apiJson(`${API}/datasets/${dataset.id}/resources?per_page=100`)
   const items = rBody.data ?? []
   logTitles('resources', items)
+  logResourceDetails(items)
   const csv = pickCsv(items)
-  if (!csv) throw new Error('brak zasobów CSV w zbiorze')
-  console.log(`  Zasób CSV: „${csv.title}" (${csv.date})`)
+  if (!csv) throw new Error('brak zasobów CSV w zbiorze (formaty i URL-e zasobów w logu powyżej)')
+  console.log(`  Zasób CSV: „${stripTags(csv.title)}" (${csv.date})`)
   return csv.url
 }
 
