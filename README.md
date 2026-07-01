@@ -20,20 +20,6 @@ zapisuje je w projekcie:
 Strona buduje się ze statycznych plików (`output: 'export'`), więc jest szybka i
 nie wymaga serwera.
 
-## Rozwój lokalny
-
-```bash
-npm install
-npm run seed     # dane demonstracyjne (offline) — pozwalają od razu uruchomić projekt
-npm run dev      # http://localhost:3000
-```
-
-Aby pobrać prawdziwe dane i zdjęcia (wymaga dostępu do api.sejm.gov.pl):
-
-```bash
-npm run sync     # nadpisuje data/ i public/photos realnymi danymi
-```
-
 ## Publikacja (GitHub Pages)
 
 Workflow [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) przy
