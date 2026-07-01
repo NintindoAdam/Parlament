@@ -9,6 +9,8 @@ next-env.d.ts
 # generated data (real data + photos are produced by `npm run sync` in CI)
 /public/photos
 /public/photos-mini
+/public/places
+/data/places-cache
 
 # misc
 .DS_Store

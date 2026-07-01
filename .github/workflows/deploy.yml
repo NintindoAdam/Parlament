@@ -66,6 +66,19 @@ jobs:
         env:
           SEJM_TERM: '10'
 
+      # Rejestr miejscowości (CSV z dane.gov.pl) zmienia się ~raz w roku —
+      # cache pozwala budować stronę nawet przy chwilowej awarii źródła.
+      - name: Cache rejestru miejscowości (CSV)
+        uses: actions/cache@v4
+        with:
+          path: data/places-cache
+          key: places-csv-v1-${{ github.run_id }}
+          restore-keys: |
+            places-csv-v1-
+
+      - name: Indeks miejscowości (Kto mnie reprezentuje?)
+        run: npm run sync:places
+
       - name: Build (statyczny eksport)
         run: npm run build
         env:

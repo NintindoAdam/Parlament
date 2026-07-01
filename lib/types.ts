@@ -69,6 +69,14 @@ export interface SeatedMP {
   index: number
 }
 
+/** Minimalny, serializowalny opis posła dla list/kart po stronie klienta. */
+export interface MiniMP {
+  id: number
+  name: string
+  club: string
+  hasPhoto: boolean
+}
+
 /** Lekki, serializowalny obiekt miejsca przekazywany do komponentów klienckich. */
 export interface SeatDatum {
   id: number

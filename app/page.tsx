@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { ParliamentMap } from '@/components/ParliamentMap'
 import { getClubCounts, getClubMeta, getMeta, getSeating } from '@/lib/data'
 import type { SeatDatum } from '@/lib/types'
@@ -34,6 +35,17 @@ export default function HomePage() {
         <p className="mt-3 text-pretty text-sm leading-relaxed text-ink-muted sm:text-base">
           Interaktywny plan sali posiedzeń. Najedź na dowolne miejsce, aby poznać posła, jego klub i
           okręg wyborczy — kliknij, by otworzyć pełny profil.
+        </p>
+        <p className="mt-3 text-sm">
+          <Link
+            href="/kto-mnie-reprezentuje"
+            className="inline-flex items-center gap-1.5 font-semibold text-ink-soft underline decoration-black/20 underline-offset-4 transition-colors hover:text-ink hover:decoration-black/50"
+          >
+            Nie wiesz, kto Cię reprezentuje? Sprawdź po miejscowości
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M5 12h14m-6-6 6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </Link>
         </p>
       </section>
 

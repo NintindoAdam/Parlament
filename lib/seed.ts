@@ -1,5 +1,8 @@
+import okregiData from '../data/okregi.json'
 import { CLUB_META } from './clubs'
 import type { ClubCount, DataMeta, MP } from './types'
+
+const DISTRICTS = (okregiData as { districts: { num: number; name: string }[] }).districts
 
 /**
  * Generuje DEMONSTRACYJNY (placeholder) zestaw danych, gdy nie uruchomiono
@@ -31,14 +34,17 @@ export function generateSeed(asOf = '01.06.2026'): {
   for (const code of Object.keys(SEED_COUNTS)) {
     const count = SEED_COUNTS[code]
     for (let i = 1; i <= count; i++) {
+      // Rozdzielamy posłów cyklicznie po 41 okręgach, by strony okręgów i
+      // wyszukiwarka „Kto mnie reprezentuje?" działały także na seedzie.
+      const district = DISTRICTS[(id - 1) % DISTRICTS.length]
       mps.push({
         id,
         firstName: 'Poseł',
         lastName: `#${id}`,
         name: `Poseł #${id}`,
         club: code,
-        districtName: 'dane demonstracyjne',
-        districtNum: null,
+        districtName: district.name,
+        districtNum: district.num,
         voivodeship: '',
         profession: '',
         birthDate: null,

@@ -1,11 +1,12 @@
 import Link from 'next/link'
 import { getMeta } from '@/lib/data'
+import { NavLinks } from './NavLinks'
 
 export function Header() {
   const meta = getMeta()
   return (
     <header className="sticky top-0 z-40 border-b border-black/5 bg-parchment/80 backdrop-blur-md">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3 sm:px-6">
         <Link href="/" className="group flex items-center gap-3">
           <Emblem />
           <span className="flex flex-col leading-tight">
@@ -17,8 +18,14 @@ export function Header() {
             </span>
           </span>
         </Link>
+        {/* Na wąskich ekranach nawigacja przechodzi do drugiego wiersza. */}
+        <div className="order-last w-full sm:order-none sm:w-auto sm:flex-1">
+          <div className="flex justify-center sm:justify-end">
+            <NavLinks />
+          </div>
+        </div>
         {meta.asOf ? (
-          <span className="hidden rounded-full border border-black/10 bg-white/70 px-3 py-1 text-xs font-medium text-ink-muted shadow-sm sm:inline-block">
+          <span className="hidden rounded-full border border-black/10 bg-white/70 px-3 py-1 text-xs font-medium text-ink-muted shadow-sm lg:inline-block">
             stan na {meta.asOf}
           </span>
         ) : null}
