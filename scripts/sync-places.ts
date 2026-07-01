@@ -341,16 +341,42 @@ async function readTable(filePath: string): Promise<string[][]> {
       rows.push(values.slice(1).map(cellToString))
     })
     if (rows.length === 0) continue
-    const hasHeader = rows[0].some((h) => normalizePlace(h).includes('nazwa miejscowosci'))
-    console.log(`  Arkusz „${ws.name}": ${rows.length} wierszy${hasHeader ? ' (nagłówek OK)' : ''}`)
-    if (!hasHeader) continue
-    if (out.length === 0) out.push(...rows)
-    else out.push(...rows.slice(1)) // kolejne arkusze bez duplikatu nagłówka
+    const headerIdx = findHeaderRow(rows)
+    console.log(
+      `  Arkusz „${ws.name}": ${rows.length} wierszy` +
+        (headerIdx >= 0 ? ` (nagłówek w wierszu ${headerIdx + 1})` : ' (BRAK nagłówka)')
+    )
+    if (headerIdx < 0) {
+      for (const r of rows.slice(0, 3)) {
+        console.log('    | ' + r.slice(0, 8).join(' | ').slice(0, 160))
+      }
+      continue
+    }
+    console.log('    Nagłówek: ' + rows[headerIdx].join(' | ').slice(0, 200))
+    if (out.length === 0) out.push(...rows.slice(headerIdx))
+    else out.push(...rows.slice(headerIdx + 1)) // kolejne arkusze bez duplikatu nagłówka
   }
   if (out.length === 0) {
-    throw new Error('XLSX: żaden arkusz nie zawiera kolumny „nazwa miejscowości"')
+    throw new Error('XLSX: nie znaleziono wiersza nagłówka (próbki wierszy w logu powyżej)')
   }
   return out
+}
+
+/**
+ * Szuka wiersza nagłówka w pierwszych wierszach arkusza (rządowe pliki często
+ * zaczynają się od tytułu). Nagłówek musi mieć kolumny nazwy, powiatu i województwa.
+ */
+function findHeaderRow(rows: string[][]): number {
+  for (let i = 0; i < Math.min(rows.length, 10); i++) {
+    const normed = rows[i].map((c) => normalizePlace(c))
+    const hasName = normed.some(
+      (h) => (h.includes('nazwa') && h.includes('miejscowos')) || h.startsWith('miejscowosc')
+    )
+    const hasPowiat = normed.some((h) => h.includes('powiat'))
+    const hasWoj = normed.some((h) => h.includes('wojewodztwo'))
+    if (hasName && hasPowiat && hasWoj) return i
+  }
+  return -1
 }
 
 function findColumn(header: string[], ...patterns: ((h: string) => boolean)[]): number {
@@ -373,17 +399,28 @@ async function main() {
   const col = {
     name: findColumn(
       header,
-      (h) => h.includes('nazwa miejscowosci') && !h.includes('podstawowej'),
+      (h) => h.includes('nazwa') && h.includes('miejscowos') && !h.includes('podstawow'),
+      (h) => h === 'miejscowosc',
+      (h) => h.startsWith('miejscowosc') && !h.includes('podstawow'),
       (h) => h === 'nazwa'
     ),
-    rodzaj: findColumn(header, (h) => h.includes('rodzaj')),
-    gmina: findColumn(header, (h) => h.includes('gmina') && !h.includes('rodzaj')),
-    powiat: findColumn(header, (h) => h.includes('powiat')),
-    woj: findColumn(header, (h) => h.includes('wojewodztwo')),
+    rodzaj: findColumn(
+      header,
+      (h) => h === 'rodzaj',
+      (h) => h.includes('rodzaj') && h.includes('miejscowos'),
+      (h) => h.includes('rodzaj') && !h.includes('gmin')
+    ),
+    gmina: findColumn(
+      header,
+      (h) => h === 'gmina',
+      (h) => h.includes('gmina') && !h.includes('rodzaj')
+    ),
+    powiat: findColumn(header, (h) => h === 'powiat', (h) => h.includes('powiat')),
+    woj: findColumn(header, (h) => h === 'wojewodztwo', (h) => h.includes('wojewodztwo')),
     parent: findColumn(
       header,
-      (h) => h.includes('nazwa') && h.includes('podstawowej'),
-      (h) => h.includes('podstawowej') && !h.includes('identyfikator')
+      (h) => h.includes('nazwa') && h.includes('podstawow'),
+      (h) => h.includes('miejscowos') && h.includes('podstawow') && !h.includes('identyfikator')
     ),
   }
   console.log('  Kolumny:', JSON.stringify(col), '| nagłówek:', header.join(' | '))
