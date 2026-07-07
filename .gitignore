@@ -14,6 +14,7 @@ next-env.d.ts
 /data/places-cache
 /data/votings-cache
 /data/attendance.json
+/data/votings-diag.txt
 
 # misc
 .DS_Store

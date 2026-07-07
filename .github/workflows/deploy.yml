@@ -127,6 +127,15 @@ jobs:
         with:
           path: ./out
 
+      # Diagnostyka większości/progów na SAMYM KOŃCU logu — za listą plików
+      # artefaktu — żeby była w dostępnym (ograniczonym) ogonie logu Akcji.
+      - name: Diagnostyka wyników głosowań (weryfikacja progów)
+        if: always()
+        run: |
+          echo "===== DIAGNOSTYKA WIĘKSZOŚCI (sync:votings) ====="
+          cat data/votings-diag.txt || echo "brak pliku diagnostyki"
+          echo "===== KONIEC DIAGNOSTYKI ====="
+
   deploy:
     needs: build
     runs-on: ubuntu-latest

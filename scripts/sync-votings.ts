@@ -456,22 +456,45 @@ async function main() {
       return v.votes.y.length > v.votes.n.length + v.votes.a.length ? 'PRZYJĘTO' : 'ODRZUCONO'
     return '?'
   }
-  console.log(
-    `  Rodzaje większości: ${[...typeStats.entries()].map(([k, n]) => `${k}:${n}`).join(', ')}`
-  )
-  console.log(`  Z progiem majorityVotes: ${withThreshold}, z typem bez progu: ${typedNoThreshold}`)
+  const fmtRow = (sitting: number, v: VotingRecord) =>
+    `s${sitting}/${v.num} ${v.majorityType ?? '(brak)'} próg=${v.majorityVotes ?? '?'} za=${v.votes.y.length} przeciw=${v.votes.n.length} wstrz=${v.votes.a.length} oddano=${v.totalVoted ?? '?'} -> ${outcome(v)} | ${v.title.slice(0, 50)}`
+
   // Przykłady głosowań o większości innej niż zwykła — do weryfikacji progów.
   const nonSimple: string[] = []
   for (const sc of sittings) {
     for (const v of sc.votings) {
-      if (v.majorityType && v.majorityType !== 'SIMPLE_MAJORITY' && nonSimple.length < 6) {
-        nonSimple.push(
-          `s${sc.sitting}/${v.num} ${v.majorityType} próg=${v.majorityVotes ?? '?'} za=${v.votes.y.length} przeciw=${v.votes.n.length} wstrz=${v.votes.a.length} -> ${outcome(v)} | ${v.title.slice(0, 45)}`
-        )
+      if (v.majorityType && v.majorityType !== 'SIMPLE_MAJORITY' && nonSimple.length < 12) {
+        nonSimple.push(fmtRow(sc.sitting, v))
       }
     }
   }
-  if (nonSimple.length) console.log('  Przykłady (nie-zwykła większość):\n    ' + nonSimple.join('\n    '))
+
+  // Punkt kontrolny (plan): głosowanie o pociągnięcie posła Mentzena do
+  // odpowiedzialności — posiedzenie 59, głosowanie 51 (większość bezwzględna,
+  // próg 231; za 227 → wniosek NIE przeszedł). Wyszukaj i wypisz, jeśli obecne.
+  const check: string[] = []
+  const s59 = sittings.find((s) => s.sitting === 59)
+  if (s59) {
+    for (const v of s59.votings) {
+      if (v.majorityType && v.majorityType !== 'SIMPLE_MAJORITY') check.push(fmtRow(59, v))
+    }
+  }
+
+  const diag = [
+    `Rodzaje większości: ${[...typeStats.entries()].map(([k, n]) => `${k}:${n}`).join(', ')}`,
+    `Z progiem majorityVotes: ${withThreshold}, z typem bez progu: ${typedNoThreshold}`,
+    nonSimple.length ? 'Przykłady (nie-zwykła większość):\n    ' + nonSimple.join('\n    ') : 'Brak głosowań innych niż zwykła większość.',
+    s59
+      ? check.length
+        ? 'Punkt kontrolny — posiedzenie 59 (nie-zwykła większość):\n    ' + check.join('\n    ')
+        : 'Punkt kontrolny — posiedzenie 59 obecne, ale bez głosowań o większości innej niż zwykła.'
+      : 'Punkt kontrolny — posiedzenie 59 niedostępne w tym przebiegu.',
+  ].join('\n  ')
+
+  console.log('  ' + diag)
+  // Zapis do pliku, by krok workflow mógł wypisać diagnostykę na KOŃCU logu
+  // (dostępnego przez API), za listą plików artefaktu.
+  await fs.writeFile(path.join(ROOT, 'data', 'votings-diag.txt'), diag + '\n')
 }
 
 main().catch((err) => {
