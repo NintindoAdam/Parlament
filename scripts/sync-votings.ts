@@ -32,9 +32,10 @@ const CACHE_DIR = path.join(ROOT, 'data', 'votings-cache')
 const ATTENDANCE_FILE = path.join(ROOT, 'data', 'attendance.json')
 const OUT_DIR = path.join(ROOT, 'public', 'votings')
 
-const CACHE_SCHEMA = 2
+const CACHE_SCHEMA = 3
 const TITLE_MAX = 300
 const TOPIC_MAX = 200
+const OPTION_MAX = 120
 
 interface GroupedVotes {
   y: number[]
@@ -42,6 +43,8 @@ interface GroupedVotes {
   a: number[]
   x: number[]
   v: number[]
+  /** Głosowania listowe: numer opcji (1-based, jako string) → posłowie, którzy ją wybrali. */
+  l?: Record<string, number[]>
 }
 
 interface VotingRecord {
@@ -50,6 +53,8 @@ interface VotingRecord {
   title: string
   topic: string
   kind: string
+  /** Opisy opcji głosowania listowego (indeks 0 = opcja „1"). */
+  options?: string[]
   votes: GroupedVotes
 }
 
@@ -75,7 +80,28 @@ interface VotingDetailApi {
   topic?: string
   description?: string
   kind?: string
-  votes?: { MP?: number; vote?: string }[]
+  /** Opcje głosowania listowego — API zwraca votingOptions[{option?, optionIndex?, description?}]. */
+  votingOptions?: { option?: string; optionIndex?: number; description?: string }[]
+  votes?: {
+    MP?: number
+    vote?: string
+    /** Wybrane opcje w głosowaniu listowym: tablica numerów LUB mapa nr→YES/NO. */
+    listVotes?: unknown
+  }[]
+}
+
+/**
+ * Normalizuje pole listVotes do listy numerów wybranych opcji.
+ * Obsługuje oba spotykane kształty: tablicę numerów oraz mapę {"1":"YES",…}.
+ */
+function selectedOptions(listVotes: unknown): string[] {
+  if (Array.isArray(listVotes)) return listVotes.map((v) => String(v))
+  if (listVotes && typeof listVotes === 'object') {
+    return Object.entries(listVotes as Record<string, unknown>)
+      .filter(([, v]) => v === 'YES' || v === true || v === 'true')
+      .map(([k]) => k)
+  }
+  return []
 }
 
 async function fetchJson<T>(url: string): Promise<T | null> {
@@ -117,6 +143,7 @@ async function fetchSitting(sitting: number): Promise<SittingCache> {
     const detail = await fetchJson<VotingDetailApi>(`${API}/votings/${sitting}/${num}`)
     if (!detail) return
     const groups: GroupedVotes = { y: [], n: [], a: [], x: [], v: [] }
+    const byOption: Record<string, number[]> = {}
     for (const v of detail.votes ?? []) {
       if (v.MP == null) continue
       switch (v.vote) {
@@ -129,23 +156,40 @@ async function fetchSitting(sitting: number): Promise<SittingCache> {
         case 'ABSTAIN':
           groups.a.push(v.MP)
           break
-        case 'VOTE_VALID':
+        case 'VOTE_VALID': {
           groups.v.push(v.MP)
+          for (const opt of selectedOptions(v.listVotes)) {
+            if (!byOption[opt]) byOption[opt] = []
+            byOption[opt].push(v.MP)
+          }
           break
+        }
         default:
           groups.x.push(v.MP)
       }
     }
+    if (Object.keys(byOption).length > 0) groups.l = byOption
+
+    // Opisy opcji głosowania listowego, w kolejności numerów opcji.
+    const options = (detail.votingOptions ?? [])
+      .map((o, i) => ({
+        idx: o.optionIndex ?? i + 1,
+        label: clip((o.option ?? o.description ?? `Opcja ${i + 1}`).trim(), OPTION_MAX),
+      }))
+      .sort((a, b) => a.idx - b.idx)
+      .map((o) => o.label)
     const date = (detail.date ?? item.date ?? '').slice(0, 19)
     if (date.slice(0, 10) > lastVotingDate) lastVotingDate = date.slice(0, 10)
-    votings.push({
+    const record: VotingRecord = {
       num,
       date,
       title: clip((detail.title ?? item.title ?? `Głosowanie nr ${num}`).trim(), TITLE_MAX),
       topic: clip((detail.topic ?? detail.description ?? item.topic ?? item.description ?? '').trim(), TOPIC_MAX),
       kind: detail.kind ?? item.kind ?? 'ELECTRONIC',
       votes: groups,
-    })
+    }
+    if (options.length > 0) record.options = options
+    votings.push(record)
   })
 
   votings.sort((a, b) => a.num - b.num)
@@ -339,11 +383,34 @@ async function main() {
 
   const files = await emitPublic(sittings, generatedAt)
 
+  // Diagnostyka głosowań listowych: ile ma opcje i rozbicie per opcja.
+  let onList = 0
+  let withOptions = 0
+  let sample: string | null = null
+  for (const sc of sittings) {
+    for (const v of sc.votings) {
+      if (v.kind !== 'ON_LIST' && !v.votes.l) continue
+      onList++
+      if (v.options?.length && v.votes.l) {
+        withOptions++
+        if (!sample) {
+          sample = `${sc.sitting}/${v.num} „${v.title.slice(0, 60)}" opcje=[${v.options
+            .map((o, i) => `${i + 1}:${o.slice(0, 30)} (${v.votes.l?.[String(i + 1)]?.length ?? 0})`)
+            .join('; ')}]`
+        }
+      }
+    }
+  }
   console.log('✔ Głosowania zsynchronizowane.')
   console.log(
     `  Posiedzenia: ${sittingNums.length}, głosowania: ${totalVotings}, posłowie: ${Object.keys(perMP).length}, ` +
       `ostatnie głosowanie: ${lastVotingDate}, plików public/votings: ${files}`
   )
+  console.log(`  Głosowania listowe: ${onList}, z rozbiciem na opcje: ${withOptions}`)
+  if (sample) console.log(`  Przykład: ${sample}`)
+  if (onList > 0 && withOptions === 0) {
+    console.warn('  ⚠ Żadne głosowanie listowe nie ma rozbicia na opcje — sprawdź kształt pola listVotes/votingOptions w API.')
+  }
 }
 
 main().catch((err) => {

@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import type { SeatDatum } from '@/lib/types'
-import { VOTE_META, type VoteCode } from '@/lib/votings'
+import { VOTE_META, voteLabel, type VoteCode } from '@/lib/votings'
 import { Photo } from './Photo'
 
 interface SeatPreviewProps {
@@ -9,9 +9,10 @@ interface SeatPreviewProps {
   showButton?: boolean
   /** Głos posła w aktualnie wybranym głosowaniu (tryb „Jak głosowali?"). */
   vote?: VoteCode
+  voteLabels?: Partial<Record<VoteCode, string>>
 }
 
-export function SeatPreview({ seat, showButton = false, vote }: SeatPreviewProps) {
+export function SeatPreview({ seat, showButton = false, vote, voteLabels }: SeatPreviewProps) {
   return (
     <div className="flex items-start gap-3">
       <Photo
@@ -36,7 +37,7 @@ export function SeatPreview({ seat, showButton = false, vote }: SeatPreviewProps
                 className="h-2 w-2 flex-none rounded-full"
                 style={{ backgroundColor: VOTE_META[vote].color }}
               />
-              {VOTE_META[vote].label}
+              {voteLabel(vote, voteLabels)}
             </span>
           ) : null}
         </span>

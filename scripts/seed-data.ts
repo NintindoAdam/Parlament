@@ -123,14 +123,29 @@ async function writeSeedVotings(publicDir: string, mps: MP[]) {
 
     for (let num = 1; num <= 8; num++) {
       const isList = num === 8
-      const groups = { y: [] as number[], n: [] as number[], a: [] as number[], x: [] as number[], v: [] as number[] }
+      const groups = {
+        y: [] as number[],
+        n: [] as number[],
+        a: [] as number[],
+        x: [] as number[],
+        v: [] as number[],
+        l: undefined as Record<string, number[]> | undefined,
+      }
       const coalitionFor = num % 2 === 0
+      if (isList) groups.l = { '1': [], '2': [] }
 
       for (const mp of mps) {
         if (!mp.active) continue
         if (isList) {
-          if ((mp.id * 7 + num) % 23 === 0) groups.x.push(mp.id)
-          else groups.v.push(mp.id)
+          if ((mp.id * 7 + num) % 23 === 0) {
+            groups.x.push(mp.id)
+          } else {
+            groups.v.push(mp.id)
+            // Koalicja popiera kandydata 1, opozycja kandydata 2 (z wyłamańcami).
+            let picksFirst = clubOrder(mp.club) <= 7
+            if ((mp.id * 31 + num) % 41 === 0) picksFirst = !picksFirst
+            groups.l![picksFirst ? '1' : '2'].push(mp.id)
+          }
           continue
         }
         if ((mp.id * 7 + num) % 23 === 0) {
@@ -149,17 +164,20 @@ async function writeSeedVotings(publicDir: string, mps: MP[]) {
       }
 
       const date = `${sitting.dates[num <= 4 ? 0 : 1]}T${String(9 + num).padStart(2, '0')}:30:00`
-      const record = {
+      const record: Record<string, unknown> = {
         sitting: sitting.num,
         num,
         date,
-        title: `Głosowanie nr ${num} — pkt ${num}. porządku dziennego (druk demonstracyjny nr ${sitting.num * 100 + num})`,
+        title: isList
+          ? `Głosowanie nr ${num} — wybór przewodniczącego (dane demonstracyjne)`
+          : `Głosowanie nr ${num} — pkt ${num}. porządku dziennego (druk demonstracyjny nr ${sitting.num * 100 + num})`,
         topic: isList
-          ? 'wybór składu komisji (głosowanie listowe, dane demonstracyjne)'
+          ? 'wybór z listy kandydatów (głosowanie listowe, dane demonstracyjne)'
           : `przyjęcie ${num % 2 === 0 ? 'projektu ustawy' : 'poprawki'} — dane demonstracyjne`,
         kind: isList ? 'ON_LIST' : 'ELECTRONIC',
         votes: groups,
       }
+      if (isList) record.options = ['Anna Przykładowa', 'Bartosz Demonstracyjny']
       await fs.writeFile(path.join(dir, `${num}.json`), JSON.stringify(record))
       indexVotings.push({
         num,

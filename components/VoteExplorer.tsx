@@ -3,11 +3,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ClubCount, SeatDatum } from '@/lib/types'
 import {
+  expandListVotes,
   expandVotes,
   fetchSittingIndex,
   fetchVotingDetail,
   fetchVotingsManifest,
   formatVoteParam,
+  LIST_OPTION_LABELS,
   parseVoteParam,
   VOTE_META,
   type SittingIndex,
@@ -41,6 +43,8 @@ export function VoteExplorer(props: VoteExplorerProps) {
   const [index, setIndex] = useState<SittingIndex | null>(null)
   const [indexLoading, setIndexLoading] = useState(false)
   const [votingNum, setVotingNum] = useState<number | null>(null)
+  // Wybrana opcja/kandydat w głosowaniu listowym (numer 1-based jako string).
+  const [option, setOption] = useState<string | null>(null)
   const [detail, setDetail] = useState<VotingDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [failed, setFailed] = useState(false)
@@ -55,6 +59,7 @@ export function VoteExplorer(props: VoteExplorerProps) {
       setMode('votes')
       setSitting(parsed.sitting)
       setVotingNum(parsed.voting)
+      setOption(parsed.option)
     }
     setRestored(true)
   }, [])
@@ -114,27 +119,58 @@ export function VoteExplorer(props: VoteExplorerProps) {
     }
   }, [mode, sitting, votingNum])
 
+  /** Czy szczegóły to głosowanie listowe z pełnym rozbiciem na opcje? */
+  const hasOptions = !!(
+    detail &&
+    detail.options &&
+    detail.options.length > 0 &&
+    detail.votes.l &&
+    Object.keys(detail.votes.l).length > 0
+  )
+
+  // Domyślna opcja głosowania listowego: ta z największym poparciem.
+  useEffect(() => {
+    if (!hasOptions || !detail?.votes.l) return
+    const valid = option != null && detail.votes.l[option] !== undefined
+    if (valid) return
+    const best = Object.entries(detail.votes.l).sort((a, b) => b[1].length - a[1].length)[0]
+    setOption(best ? best[0] : null)
+  }, [detail, hasOptions, option])
+
   // Synchronizacja URL.
   useEffect(() => {
     if (!restored) return
     const url = new URL(window.location.href)
     if (mode === 'votes' && sitting != null && votingNum != null) {
-      url.searchParams.set('g', formatVoteParam(sitting, votingNum))
+      url.searchParams.set('g', formatVoteParam(sitting, votingNum, hasOptions ? option : null))
     } else {
       url.searchParams.delete('g')
     }
     window.history.replaceState(null, '', url)
-  }, [mode, sitting, votingNum, restored])
+  }, [mode, sitting, votingNum, option, hasOptions, restored])
 
   const voteView: VoteView | null = useMemo(() => {
     if (mode !== 'votes' || !detail) return null
+    if (hasOptions && option != null) {
+      return {
+        votes: expandListVotes(detail.votes, option),
+        kind: detail.kind,
+        labels: LIST_OPTION_LABELS,
+      }
+    }
     return { votes: expandVotes(detail.votes), kind: detail.kind }
-  }, [mode, detail])
+  }, [mode, detail, hasOptions, option])
 
   function selectSitting(num: number) {
     setSitting(num)
     setVotingNum(null)
+    setOption(null)
     setDetail(null)
+  }
+
+  function selectVoting(num: number) {
+    setVotingNum(num)
+    setOption(null)
   }
 
   return (
@@ -196,7 +232,7 @@ export function VoteExplorer(props: VoteExplorerProps) {
                 <VotingPicker
                   votings={index?.votings ?? []}
                   selected={votingNum}
-                  onSelect={setVotingNum}
+                  onSelect={selectVoting}
                   loading={indexLoading}
                 />
               </div>
@@ -208,7 +244,7 @@ export function VoteExplorer(props: VoteExplorerProps) {
               ) : null}
 
               {detail ? (
-                <VotingSummaryCard detail={detail} />
+                <VotingSummaryCard detail={detail} option={option} onSelectOption={setOption} />
               ) : !failed ? (
                 <p className="mt-3 text-center text-xs text-ink-muted">
                   {detailLoading
@@ -264,8 +300,17 @@ function ModeButton({
   )
 }
 
-function VotingSummaryCard({ detail }: { detail: VotingDetail }) {
+function VotingSummaryCard({
+  detail,
+  option,
+  onSelectOption,
+}: {
+  detail: VotingDetail
+  option: string | null
+  onSelectOption: (option: string) => void
+}) {
   const isList = detail.kind === 'ON_LIST'
+  const hasOptions = !!(detail.options?.length && detail.votes.l && Object.keys(detail.votes.l).length > 0)
   const counts = [
     { label: VOTE_META.yes.label, value: detail.votes.y.length, color: VOTE_META.yes.color },
     { label: VOTE_META.no.label, value: detail.votes.n.length, color: VOTE_META.no.color },
@@ -279,35 +324,75 @@ function VotingSummaryCard({ detail }: { detail: VotingDetail }) {
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-semibold leading-snug text-ink">{detail.title}</h3>
-          {detail.topic ? <p className="mt-0.5 text-xs text-ink-muted">{detail.topic}</p> : null}
+          {detail.topic && detail.topic !== detail.title ? (
+            <p className="mt-0.5 text-xs text-ink-muted">{detail.topic}</p>
+          ) : null}
         </div>
         <p className="flex-none text-xs text-ink-muted">{formatDateTime(detail.date)}</p>
       </div>
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
-        {isList ? (
-          <span className="text-xs font-medium text-ink-muted">
-            Głosowanie listowe — bez podziału za/przeciw · głos oddany:{' '}
-            <span className="font-semibold text-ink">{detail.votes.v.length}</span> · nieobecni:{' '}
-            <span className="font-semibold text-ink">{detail.votes.x.length}</span>
-          </span>
-        ) : (
-          <>
-            {counts.map((c) => (
-              <span key={c.label} className="inline-flex items-center gap-1.5 text-xs text-ink-muted">
-                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: c.color }} />
-                {c.label}: <span className="font-semibold tabular-nums text-ink">{c.value}</span>
-              </span>
-            ))}
-            <span
-              className={`ml-auto rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
-                passed ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
-              }`}
-            >
-              {passed ? 'przyjęto' : 'odrzucono'}
+
+      {isList && hasOptions ? (
+        <div className="mt-3">
+          <p className="text-xs font-medium text-ink-muted">
+            Głosowanie listowe — wybierz opcję, aby zobaczyć, kto ją poparł:
+          </p>
+          <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Opcje głosowania">
+            {detail.options!.map((label, i) => {
+              const key = String(i + 1)
+              const supporters = detail.votes.l?.[key]?.length ?? 0
+              const isActive = option === key
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => onSelectOption(key)}
+                  aria-pressed={isActive}
+                  className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                    isActive
+                      ? 'border-ink bg-ink text-white'
+                      : 'border-black/10 bg-white/80 text-ink-soft hover:bg-black/[0.04]'
+                  }`}
+                >
+                  <span className="truncate">{label}</span>
+                  <span className={`flex-none font-semibold tabular-nums ${isActive ? 'text-white/80' : 'text-ink'}`}>
+                    {supporters}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+          <p className="mt-2 text-xs text-ink-muted">
+            Głos oddany: <span className="font-semibold text-ink">{detail.votes.v.length}</span> ·
+            nieobecni: <span className="font-semibold text-ink">{detail.votes.x.length}</span>
+          </p>
+        </div>
+      ) : (
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+          {isList ? (
+            <span className="text-xs font-medium text-ink-muted">
+              Głosowanie listowe — bez podziału za/przeciw · głos oddany:{' '}
+              <span className="font-semibold text-ink">{detail.votes.v.length}</span> · nieobecni:{' '}
+              <span className="font-semibold text-ink">{detail.votes.x.length}</span>
             </span>
-          </>
-        )}
-      </div>
+          ) : (
+            <>
+              {counts.map((c) => (
+                <span key={c.label} className="inline-flex items-center gap-1.5 text-xs text-ink-muted">
+                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: c.color }} />
+                  {c.label}: <span className="font-semibold tabular-nums text-ink">{c.value}</span>
+                </span>
+              ))}
+              <span
+                className={`ml-auto rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+                  passed ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                }`}
+              >
+                {passed ? 'przyjęto' : 'odrzucono'}
+              </span>
+            </>
+          )}
+        </div>
+      )}
     </div>
   )
 }

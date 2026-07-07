@@ -1,9 +1,10 @@
 'use client'
 
-import { countVotes, VOTE_META, type VoteCode } from '@/lib/votings'
+import { countVotes, VOTE_META, voteLabel, type VoteCode } from '@/lib/votings'
 
 interface VoteLegendProps {
   votes: Record<number, VoteCode>
+  labels?: Partial<Record<VoteCode, string>>
   active: string | null
   onActivate: (code: string | null) => void
 }
@@ -12,7 +13,7 @@ interface VoteLegendProps {
  * Legenda trybu „Jak głosowali?" — wizualny i interakcyjny odpowiednik
  * ClubLegend (hover/fokus/klik wygasza pozostałe kategorie na mapie).
  */
-export function VoteLegend({ votes, active, onActivate }: VoteLegendProps) {
+export function VoteLegend({ votes, labels, active, onActivate }: VoteLegendProps) {
   const counts = countVotes(votes)
   const rows = (Object.keys(VOTE_META) as VoteCode[])
     .filter((code) => (counts[code] ?? 0) > 0)
@@ -49,7 +50,7 @@ export function VoteLegend({ votes, active, onActivate }: VoteLegendProps) {
                   style={{ backgroundColor: meta.color }}
                 />
                 <span className="flex-1 text-xs font-medium leading-tight text-ink-soft">
-                  {meta.label}
+                  {voteLabel(code, labels)}
                 </span>
                 <span className="font-display text-sm font-semibold tabular-nums text-ink">
                   {counts[code]}

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { ClubCount, SeatDatum } from '@/lib/types'
-import { VOTE_META, type VoteCode } from '@/lib/votings'
+import { VOTE_META, voteLabel, type VoteCode } from '@/lib/votings'
 import { ClubLegend } from './ClubLegend'
 import { SeatPreview } from './SeatPreview'
 import { VoteLegend } from './VoteLegend'
@@ -12,6 +12,8 @@ import { VoteLegend } from './VoteLegend'
 export interface VoteView {
   votes: Record<number, VoteCode>
   kind: string
+  /** Nadpisane etykiety kategorii (np. „Poparł(a)" dla opcji głosowania listowego). */
+  labels?: Partial<Record<VoteCode, string>>
 }
 
 interface ParliamentMapProps {
@@ -85,7 +87,7 @@ export function ParliamentMap({
             const isHovered = hoveredId === s.id
             const isDimmed = activeGroup !== null && groupOf(s) !== activeGroup
             const r = isHovered ? seatRadius * 1.5 : seatRadius
-            const voteLabel = voteView ? `, głos: ${VOTE_META[voteOf(s.id)].label}` : ''
+            const ariaVote = voteView ? `, głos: ${voteLabel(voteOf(s.id), voteView.labels)}` : ''
             return (
               <g key={s.id}>
                 {/* Widoczny kwadracik (mniejszy, z luką) — bez obsługi zdarzeń. */}
@@ -113,7 +115,7 @@ export function ParliamentMap({
                   fill="transparent"
                   tabIndex={0}
                   role="link"
-                  aria-label={`${s.name}, ${s.clubName}${voteLabel}`}
+                  aria-label={`${s.name}, ${s.clubName}${ariaVote}`}
                   onMouseEnter={() => setHoveredId(s.id)}
                   onFocus={() => setHoveredId(s.id)}
                   onClick={() => activate(s)}
@@ -137,6 +139,7 @@ export function ParliamentMap({
             width={width}
             height={height}
             vote={voteView ? voteOf(hovered.id) : undefined}
+            voteLabels={voteView?.labels}
           />
         ) : null}
       </div>
@@ -144,7 +147,12 @@ export function ParliamentMap({
       {/* Legenda */}
       <div className="lg:sticky lg:top-20">
         {voteView ? (
-          <VoteLegend votes={expandForLegend(voteView, seats)} active={activeGroup} onActivate={setActiveGroup} />
+          <VoteLegend
+            votes={expandForLegend(voteView, seats)}
+            labels={voteView.labels}
+            active={activeGroup}
+            onActivate={setActiveGroup}
+          />
         ) : (
           <ClubLegend clubs={clubs} total={seats.length} active={activeGroup} onActivate={setActiveGroup} />
         )}
@@ -160,6 +168,7 @@ export function ParliamentMap({
         <MobileSheet
           seat={selected}
           vote={voteView ? voteOf(selected.id) : undefined}
+          voteLabels={voteView?.labels}
           onClose={() => setSelected(null)}
         />
       ) : null}
@@ -182,11 +191,13 @@ function SeatTooltip({
   width,
   height,
   vote,
+  voteLabels,
 }: {
   seat: SeatDatum
   width: number
   height: number
   vote?: VoteCode
+  voteLabels?: Partial<Record<VoteCode, string>>
 }) {
   const leftPct = Math.min(86, Math.max(14, (seat.x / width) * 100))
   const topPct = (seat.y / height) * 100
@@ -201,7 +212,7 @@ function SeatTooltip({
       }}
     >
       <div className="rounded-2xl border border-black/5 bg-white/95 p-3 shadow-card backdrop-blur-md">
-        <SeatPreview seat={seat} vote={vote} />
+        <SeatPreview seat={seat} vote={vote} voteLabels={voteLabels} />
       </div>
     </div>
   )
@@ -210,10 +221,12 @@ function SeatTooltip({
 function MobileSheet({
   seat,
   vote,
+  voteLabels,
   onClose,
 }: {
   seat: SeatDatum
   vote?: VoteCode
+  voteLabels?: Partial<Record<VoteCode, string>>
   onClose: () => void
 }) {
   return (
@@ -226,7 +239,7 @@ function MobileSheet({
       />
       <div className="absolute inset-x-0 bottom-0 animate-fade-in rounded-t-3xl border-t border-black/10 bg-white p-5 pb-7 shadow-card">
         <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-black/15" />
-        <SeatPreview seat={seat} showButton vote={vote} />
+        <SeatPreview seat={seat} showButton vote={vote} voteLabels={voteLabels} />
       </div>
     </div>
   )

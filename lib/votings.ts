@@ -16,6 +16,8 @@ export interface GroupedVotes {
   a: number[]
   x: number[]
   v: number[]
+  /** Głosowania listowe: numer opcji (1-based, jako string) → posłowie, którzy ją wybrali. */
+  l?: Record<string, number[]>
 }
 
 export interface VotingsManifest {
@@ -44,6 +46,8 @@ export interface SittingIndex {
 
 export interface VotingDetail extends VotingSummary {
   sitting: number
+  /** Opisy opcji głosowania listowego (indeks 0 = opcja „1"). */
+  options?: string[]
   votes: GroupedVotes
 }
 
@@ -67,6 +71,28 @@ export function expandVotes(g: GroupedVotes): Record<number, VoteCode> {
   return out
 }
 
+/**
+ * Widok głosowania listowego z perspektywy jednej opcji/kandydata:
+ * yes = poparł(a) tę opcję, no = oddał(a) głos na inną, absent = nieobecny.
+ */
+export function expandListVotes(g: GroupedVotes, option: string): Record<number, VoteCode> {
+  const out: Record<number, VoteCode> = {}
+  for (const id of g.v ?? []) out[id] = 'no'
+  for (const id of g.l?.[option] ?? []) out[id] = 'yes'
+  for (const id of g.x ?? []) out[id] = 'absent'
+  return out
+}
+
+/** Etykiety kategorii dla widoku opcji głosowania listowego. */
+export const LIST_OPTION_LABELS: Partial<Record<VoteCode, string>> = {
+  yes: 'Poparł(a)',
+  no: 'Inny wybór',
+}
+
+export function voteLabel(code: VoteCode, overrides?: Partial<Record<VoteCode, string>>): string {
+  return overrides?.[code] ?? VOTE_META[code].label
+}
+
 /** Zliczenia kategorii dla legendy (tylko kody obecne w danych + none z mapy sali). */
 export function countVotes(votes: Record<number, VoteCode>): Partial<Record<VoteCode, number>> {
   const counts: Partial<Record<VoteCode, number>> = {}
@@ -76,14 +102,16 @@ export function countVotes(votes: Record<number, VoteCode>): Partial<Record<Vote
 
 // --- Deep link `?g={sitting}-{voting}` --------------------------------------
 
-export function formatVoteParam(sitting: number, voting: number): string {
-  return `${sitting}-${voting}`
+export function formatVoteParam(sitting: number, voting: number, option?: string | null): string {
+  return option ? `${sitting}-${voting}-${option}` : `${sitting}-${voting}`
 }
 
-export function parseVoteParam(raw: string): { sitting: number; voting: number } | null {
-  const m = /^(\d+)-(\d+)$/.exec(raw)
+export function parseVoteParam(
+  raw: string
+): { sitting: number; voting: number; option: string | null } | null {
+  const m = /^(\d+)-(\d+)(?:-(\d+))?$/.exec(raw)
   if (!m) return null
-  return { sitting: Number(m[1]), voting: Number(m[2]) }
+  return { sitting: Number(m[1]), voting: Number(m[2]), option: m[3] ?? null }
 }
 
 // --- Filtrowanie listy głosowań ---------------------------------------------
