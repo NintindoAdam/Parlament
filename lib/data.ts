@@ -5,7 +5,16 @@ import path from 'path'
 import { clubOrder, getClubMeta } from './clubs'
 import { buildClubCounts, generateSeed } from './seed'
 import { computeHemicycle } from './seating'
-import type { ClubCount, DataMeta, MP, SeatedMP, SeatLayout, WikiInfo } from './types'
+import type {
+  AttendanceFile,
+  AttendanceStats,
+  ClubCount,
+  DataMeta,
+  MP,
+  SeatedMP,
+  SeatLayout,
+  WikiInfo,
+} from './types'
 
 const DATA_DIR = path.join(process.cwd(), 'data')
 
@@ -86,6 +95,33 @@ export function getSeating(): { layout: SeatLayout; seated: SeatedMP[] } {
     index,
   }))
   return { layout, seated }
+}
+
+let attendanceCache: AttendanceFile | null | undefined
+
+function loadAttendance(): AttendanceFile | null {
+  if (attendanceCache !== undefined) return attendanceCache
+  attendanceCache = readJsonSync<AttendanceFile>('attendance.json')
+  return attendanceCache
+}
+
+/** Statystyki głosowań posła; null gdy brak danych (np. przed pierwszą synchronizacją). */
+export function getAttendance(id: number): AttendanceStats | null {
+  return loadAttendance()?.perMP[String(id)] ?? null
+}
+
+export function getAttendanceMeta(): {
+  totalVotings: number
+  lastVotingDate: string
+  placeholder: boolean
+} | null {
+  const file = loadAttendance()
+  if (!file) return null
+  return {
+    totalVotings: file.totalVotings,
+    lastVotingDate: file.lastVotingDate,
+    placeholder: file.placeholder,
+  }
 }
 
 export async function getWiki(id: number): Promise<WikiInfo | null> {

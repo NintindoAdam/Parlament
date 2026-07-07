@@ -79,6 +79,21 @@ jobs:
       - name: Indeks miejscowości (Kto mnie reprezentuje?)
         run: npm run sync:places
 
+      # Zakończone posiedzenia są niezmienne — cache sprawia, że kolejne deploye
+      # pobierają tylko 2 najnowsze posiedzenia zamiast całej kadencji.
+      - name: Cache agregatów głosowań
+        uses: actions/cache@v4
+        with:
+          path: data/votings-cache
+          key: votings-v1-${{ github.run_id }}
+          restore-keys: |
+            votings-v1-
+
+      - name: Frekwencja w głosowaniach
+        run: npm run sync:votings
+        env:
+          SEJM_TERM: '10'
+
       - name: Build (statyczny eksport)
         run: npm run build
         env:

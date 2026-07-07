@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { MemberProfile } from '@/components/MemberProfile'
 import { asset } from '@/lib/asset'
-import { getAllMPs, getClubMeta, getMP, getWiki } from '@/lib/data'
+import { getAllMPs, getAttendance, getAttendanceMeta, getClubMeta, getMP, getWiki } from '@/lib/data'
 
 export function generateStaticParams() {
   return getAllMPs().map((mp) => ({ id: String(mp.id) }))
@@ -35,6 +35,16 @@ export default async function PoselPage({ params }: { params: Promise<{ id: stri
 
   const club = getClubMeta(mp.club)
   const wiki = await getWiki(mp.id)
+  const attendance = getAttendance(mp.id)
+  const attendanceMeta = getAttendanceMeta()
 
-  return <MemberProfile mp={mp} club={club} wiki={wiki} />
+  return (
+    <MemberProfile
+      mp={mp}
+      club={club}
+      wiki={wiki}
+      attendance={attendance}
+      attendanceMeta={attendanceMeta}
+    />
+  )
 }

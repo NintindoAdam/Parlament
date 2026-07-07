@@ -69,6 +69,26 @@ export interface SeatedMP {
   index: number
 }
 
+/** Statystyki udziału posła w głosowaniach (tylko głosowania w czasie mandatu). */
+export interface AttendanceStats {
+  /** Głosowania, w których poseł figurował na liście (mianownik frekwencji). */
+  total: number
+  /** Oddane głosy: yes + no + abstain + głosowania listowe (VOTE_VALID). */
+  cast: number
+  yes: number
+  no: number
+  abstain: number
+  absent: number
+}
+
+export interface AttendanceFile {
+  generatedAt: string
+  placeholder: boolean
+  totalVotings: number
+  lastVotingDate: string
+  perMP: Record<string, AttendanceStats>
+}
+
 /** Minimalny, serializowalny opis posła dla list/kart po stronie klienta. */
 export interface MiniMP {
   id: number

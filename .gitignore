@@ -11,6 +11,8 @@ next-env.d.ts
 /public/photos-mini
 /public/places
 /data/places-cache
+/data/votings-cache
+/data/attendance.json
 
 # misc
 .DS_Store

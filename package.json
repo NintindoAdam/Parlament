@@ -10,6 +10,7 @@
     "lint": "next lint",
     "sync": "tsx scripts/sync-data.ts",
     "sync:places": "tsx scripts/sync-places.ts",
+    "sync:votings": "tsx scripts/sync-votings.ts",
     "seed": "tsx scripts/seed-data.ts"
   },
   "dependencies": {

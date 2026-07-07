@@ -1,14 +1,22 @@
 import Link from 'next/link'
-import type { ClubMeta, MP, WikiInfo } from '@/lib/types'
+import type { AttendanceStats, ClubMeta, MP, WikiInfo } from '@/lib/types'
 import { Photo } from './Photo'
+
+interface AttendanceMeta {
+  totalVotings: number
+  lastVotingDate: string
+  placeholder: boolean
+}
 
 interface MemberProfileProps {
   mp: MP
   club: ClubMeta
   wiki: WikiInfo | null
+  attendance: AttendanceStats | null
+  attendanceMeta: AttendanceMeta | null
 }
 
-export function MemberProfile({ mp, club, wiki }: MemberProfileProps) {
+export function MemberProfile({ mp, club, wiki, attendance, attendanceMeta }: MemberProfileProps) {
   const details: { label: string; value: string }[] = [
     {
       label: 'Okręg wyborczy',
@@ -89,6 +97,10 @@ export function MemberProfile({ mp, club, wiki }: MemberProfileProps) {
         ) : null}
       </div>
 
+      {attendance && attendance.total > 0 ? (
+        <VotingActivity attendance={attendance} meta={attendanceMeta} />
+      ) : null}
+
       {wiki ? (
         <section className="mt-6 rounded-3xl border border-black/5 bg-white/70 p-6 shadow-soft backdrop-blur-sm sm:p-8">
           <h2 className="font-display text-lg font-semibold tracking-tight text-ink">Biografia</h2>
@@ -107,6 +119,90 @@ export function MemberProfile({ mp, club, wiki }: MemberProfileProps) {
         </section>
       ) : null}
     </article>
+  )
+}
+
+/**
+ * Sekcja „Aktywność w głosowaniach": frekwencja (KPI + pasek) i kafelki
+ * rozkładu głosów. Wartości liczbowe w sans semibold (nie serif), tekst
+ * w tonacji ink — kolor niosą wyłącznie znaczniki (kropki, wypełnienie paska).
+ */
+function VotingActivity({
+  attendance,
+  meta,
+}: {
+  attendance: AttendanceStats
+  meta: AttendanceMeta | null
+}) {
+  const pct = (attendance.cast / attendance.total) * 100
+  const pctLabel = pct.toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+  const nf = (n: number) => n.toLocaleString('pl-PL')
+
+  const tiles: { label: string; value: number; dot: string }[] = [
+    { label: 'Za', value: attendance.yes, dot: '#059669' },
+    { label: 'Przeciw', value: attendance.no, dot: '#e11d48' },
+    { label: 'Wstrzymał(a) się', value: attendance.abstain, dot: '#d97706' },
+    { label: 'Nieobecność', value: attendance.absent, dot: '#7c5cdb' },
+  ]
+
+  return (
+    <section className="mt-6 rounded-3xl border border-black/5 bg-white/70 p-6 shadow-soft backdrop-blur-sm sm:p-8">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="font-display text-lg font-semibold tracking-tight text-ink">
+          Aktywność w głosowaniach
+        </h2>
+        {meta ? (
+          <p className="text-xs text-ink-muted">
+            stan na {formatDate(meta.lastVotingDate)}
+            {meta.placeholder ? ' · dane demonstracyjne' : ''}
+          </p>
+        ) : null}
+      </div>
+
+      <div className="mt-5 grid gap-6 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,2fr)] sm:items-center">
+        {/* KPI: frekwencja */}
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">Frekwencja</p>
+          <p className="mt-1 font-sans text-4xl font-semibold text-ink">
+            {pctLabel}
+            <span className="ml-0.5 text-2xl text-ink-muted">%</span>
+          </p>
+          <div
+            className="mt-3 h-2 w-full overflow-hidden rounded-full bg-ink/10"
+            role="progressbar"
+            aria-valuenow={Math.round(pct * 10) / 10}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label={`Frekwencja w głosowaniach: ${pctLabel}%`}
+          >
+            <div className="h-full rounded-full bg-ink" style={{ width: `${Math.min(100, pct)}%` }} />
+          </div>
+          <p className="mt-2 text-xs text-ink-muted">
+            Oddane głosy: <span className="font-semibold text-ink-soft">{nf(attendance.cast)}</span> z{' '}
+            {nf(attendance.total)} głosowań
+          </p>
+        </div>
+
+        {/* Kafelki rozkładu głosów */}
+        <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+          {tiles.map((t) => (
+            <div key={t.label} className="rounded-2xl border border-black/5 bg-white/80 px-3 py-2.5">
+              <dt className="flex items-center gap-1.5 text-[11px] font-medium text-ink-muted">
+                <span
+                  className="h-2 w-2 flex-none rounded-full"
+                  style={{ backgroundColor: t.dot }}
+                  aria-hidden="true"
+                />
+                {t.label}
+              </dt>
+              <dd className="mt-1 font-sans text-lg font-semibold leading-none text-ink">
+                {nf(t.value)}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    </section>
   )
 }
 

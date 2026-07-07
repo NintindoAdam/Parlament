@@ -7,6 +7,7 @@ import { promises as fs } from 'fs'
 import path from 'path'
 import { generateSeed } from '../lib/seed'
 import { chunkKey, type PlaceTuple } from '../lib/places'
+import type { AttendanceFile, MP } from '../lib/types'
 
 /**
  * Demonstracyjny indeks miejscowości (realne miejscowości z poprawnymi
@@ -71,6 +72,29 @@ async function writeSeedPlaces(publicDir: string) {
   return SEED_PLACES.length
 }
 
+/** Deterministyczna demonstracyjna frekwencja (zależna od id — bez losowości). */
+function buildSeedAttendance(mps: MP[]): AttendanceFile {
+  const totalVotings = 1200
+  const perMP: AttendanceFile['perMP'] = {}
+  for (const mp of mps) {
+    const pct = 78 + ((mp.id * 7) % 22) // 78–99%
+    const total = totalVotings
+    const cast = Math.round((total * pct) / 100)
+    const absent = total - cast
+    const yes = Math.round(cast * 0.55)
+    const no = Math.round(cast * 0.35)
+    const abstain = cast - yes - no
+    perMP[String(mp.id)] = { total, cast, yes, no, abstain, absent }
+  }
+  return {
+    generatedAt: new Date('2026-06-01T00:00:00Z').toISOString(),
+    placeholder: true,
+    totalVotings,
+    lastVotingDate: '2026-06-01',
+    perMP,
+  }
+}
+
 async function main() {
   const dataDir = path.join(process.cwd(), 'data')
   await fs.mkdir(dataDir, { recursive: true })
@@ -80,6 +104,11 @@ async function main() {
   await fs.writeFile(path.join(dataDir, 'mps.json'), JSON.stringify(mps, null, 2))
   await fs.writeFile(path.join(dataDir, 'clubs.json'), JSON.stringify(clubs, null, 2))
   await fs.writeFile(path.join(dataDir, 'meta.json'), JSON.stringify(meta, null, 2))
+
+  await fs.writeFile(
+    path.join(dataDir, 'attendance.json'),
+    JSON.stringify(buildSeedAttendance(mps), null, 2)
+  )
 
   const placesCount = await writeSeedPlaces(path.join(process.cwd(), 'public'))
 
