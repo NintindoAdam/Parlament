@@ -137,13 +137,21 @@ function VotingActivity({
   const pct = (attendance.cast / attendance.total) * 100
   const pctLabel = pct.toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
   const nf = (n: number) => n.toLocaleString('pl-PL')
+  const share = (n: number) =>
+    ((n / attendance.total) * 100).toLocaleString('pl-PL', {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    })
 
-  const tiles: { label: string; value: number; dot: string }[] = [
-    { label: 'Za', value: attendance.yes, dot: '#059669' },
-    { label: 'Przeciw', value: attendance.no, dot: '#e11d48' },
-    { label: 'Wstrzymał(a) się', value: attendance.abstain, dot: '#d97706' },
-    { label: 'Nieobecność', value: attendance.absent, dot: '#7c5cdb' },
+  // Jeden pasek opowiada całość: oddane głosy (za/przeciw/wstrzymanie) + nieobecności.
+  // Frekwencja = część paska bez segmentu nieobecności.
+  const segments: { label: string; value: number; color: string }[] = [
+    { label: 'Za', value: attendance.yes, color: '#059669' },
+    { label: 'Przeciw', value: attendance.no, color: '#e11d48' },
+    { label: 'Wstrzymanie się', value: attendance.abstain, color: '#d97706' },
+    { label: 'Nieobecność', value: attendance.absent, color: '#7c5cdb' },
   ]
+  const barLabel = segments.map((s) => `${s.label}: ${nf(s.value)}`).join(', ')
 
   return (
     <section className="mt-6 rounded-3xl border border-black/5 bg-white/70 p-6 shadow-soft backdrop-blur-sm sm:p-8">
@@ -159,49 +167,62 @@ function VotingActivity({
         ) : null}
       </div>
 
-      <div className="mt-5 grid gap-6 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,2fr)] sm:items-center">
-        {/* KPI: frekwencja */}
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">Frekwencja</p>
-          <p className="mt-1 font-sans text-4xl font-semibold text-ink">
-            {pctLabel}
-            <span className="ml-0.5 text-2xl text-ink-muted">%</span>
-          </p>
-          <div
-            className="mt-3 h-2 w-full overflow-hidden rounded-full bg-ink/10"
-            role="progressbar"
-            aria-valuenow={Math.round(pct * 10) / 10}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-label={`Frekwencja w głosowaniach: ${pctLabel}%`}
-          >
-            <div className="h-full rounded-full bg-ink" style={{ width: `${Math.min(100, pct)}%` }} />
-          </div>
-          <p className="mt-2 text-xs text-ink-muted">
-            Oddane głosy: <span className="font-semibold text-ink-soft">{nf(attendance.cast)}</span> z{' '}
-            {nf(attendance.total)} głosowań
-          </p>
-        </div>
-
-        {/* Kafelki rozkładu głosów */}
-        <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
-          {tiles.map((t) => (
-            <div key={t.label} className="rounded-2xl border border-black/5 bg-white/80 px-3 py-2.5">
-              <dt className="flex items-center gap-1.5 text-[11px] font-medium text-ink-muted">
-                <span
-                  className="h-2 w-2 flex-none rounded-full"
-                  style={{ backgroundColor: t.dot }}
-                  aria-hidden="true"
-                />
-                {t.label}
-              </dt>
-              <dd className="mt-1 font-sans text-lg font-semibold leading-none text-ink">
-                {nf(t.value)}
-              </dd>
-            </div>
-          ))}
-        </dl>
+      {/* KPI: frekwencja */}
+      <div className="mt-6 flex flex-wrap items-end justify-between gap-x-6 gap-y-1">
+        <p className="font-sans text-5xl font-semibold tracking-tight text-ink">
+          {pctLabel}
+          <span className="ml-1 text-3xl font-medium text-ink-muted">%</span>
+          <span className="ml-3 align-baseline text-sm font-medium text-ink-muted">frekwencji</span>
+        </p>
+        <p className="pb-1 text-sm text-ink-muted">
+          <span className="font-semibold text-ink-soft">{nf(attendance.cast)}</span> głosów oddanych
+          w <span className="font-semibold text-ink-soft">{nf(attendance.total)}</span> głosowaniach
+        </p>
       </div>
+
+      {/* Segmentowany pasek rozkładu (odstępy 2px w kolorze tła karty) */}
+      <div
+        className="mt-4 flex h-3 w-full gap-[2px] overflow-hidden rounded-full"
+        role="img"
+        aria-label={`Rozkład głosów — ${barLabel}`}
+      >
+        {segments.map(
+          (s) =>
+            s.value > 0 && (
+              <div
+                key={s.label}
+                className="h-full min-w-[6px] first:rounded-l-full last:rounded-r-full"
+                style={{
+                  backgroundColor: s.color,
+                  flexGrow: s.value,
+                  flexBasis: 0,
+                }}
+              />
+            )
+        )}
+      </div>
+
+      {/* Legenda — bez ramek; oddziela ją światło, nie kreski */}
+      <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
+        {segments.map((s) => (
+          <div key={s.label} className="min-w-0">
+            <dt className="flex items-center gap-1.5 text-xs font-medium text-ink-muted">
+              <span
+                className="h-2 w-2 flex-none rounded-full"
+                style={{ backgroundColor: s.color }}
+                aria-hidden="true"
+              />
+              <span className="truncate">{s.label}</span>
+            </dt>
+            <dd className="mt-1 flex items-baseline gap-1.5">
+              <span className="font-sans text-xl font-semibold leading-none text-ink">
+                {nf(s.value)}
+              </span>
+              <span className="text-xs text-ink-muted">{share(s.value)}%</span>
+            </dd>
+          </div>
+        ))}
+      </dl>
     </section>
   )
 }
