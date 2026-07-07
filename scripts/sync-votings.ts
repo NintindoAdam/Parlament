@@ -480,7 +480,28 @@ async function main() {
     }
   }
 
+  // Spójność manifest ↔ pliki indeksów: każde posiedzenie z manifestu MUSI mieć
+  // zapisany s{n}/index.json, inaczej UI pokaże „Nie udało się pobrać danych".
+  const manifestSittings = [...sittings]
+    .filter((sc) => sc.votings.length > 0)
+    .sort((a, b) => b.sitting - a.sitting)
+  const missingIndex: number[] = []
+  for (const sc of manifestSittings) {
+    try {
+      await fs.access(path.join(OUT_DIR, `s${sc.sitting}`, 'index.json'))
+    } catch {
+      missingIndex.push(sc.sitting)
+    }
+  }
+  const sittingList = manifestSittings
+    .map((sc) => `${sc.sitting}:${sc.votings.length}`)
+    .join(', ')
+
   const diag = [
+    `Posiedzenia w manifeście (nr:głosowań): ${sittingList}`,
+    missingIndex.length
+      ? `⚠ BRAK index.json dla posiedzeń: ${missingIndex.join(', ')}`
+      : 'Spójność manifest↔indeksy: OK (każde posiedzenie ma index.json)',
     `Rodzaje większości: ${[...typeStats.entries()].map(([k, n]) => `${k}:${n}`).join(', ')}`,
     `Z progiem majorityVotes: ${withThreshold}, z typem bez progu: ${typedNoThreshold}`,
     nonSimple.length ? 'Przykłady (nie-zwykła większość):\n    ' + nonSimple.join('\n    ') : 'Brak głosowań innych niż zwykła większość.',

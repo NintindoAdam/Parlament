@@ -205,14 +205,25 @@ async function fetchJson<T>(path: string): Promise<T | null> {
 }
 
 export function fetchVotingsManifest(force = false): Promise<VotingsManifest | null> {
-  if (!manifestCache || force) manifestCache = fetchJson<VotingsManifest>('/votings/manifest.json')
+  if (!manifestCache || force) {
+    // Nie utrwalaj porażki: gdy fetch zwróci null (błąd sieci / chwilowy 404),
+    // wyczyść cache, by kolejne wywołanie spróbowało ponownie.
+    const p = fetchJson<VotingsManifest>('/votings/manifest.json').then((v) => {
+      if (v == null && manifestCache === p) manifestCache = null
+      return v
+    })
+    manifestCache = p
+  }
   return manifestCache
 }
 
 export function fetchSittingIndex(sitting: number): Promise<SittingIndex | null> {
   let p = indexCache.get(sitting)
   if (!p) {
-    p = fetchJson<SittingIndex>(`/votings/s${sitting}/index.json`)
+    p = fetchJson<SittingIndex>(`/votings/s${sitting}/index.json`).then((v) => {
+      if (v == null && indexCache.get(sitting) === p) indexCache.delete(sitting)
+      return v
+    })
     indexCache.set(sitting, p)
   }
   return p
@@ -222,7 +233,10 @@ export function fetchVotingDetail(sitting: number, voting: number): Promise<Voti
   const key = `${sitting}/${voting}`
   let p = detailCache.get(key)
   if (!p) {
-    p = fetchJson<VotingDetail>(`/votings/s${sitting}/${voting}.json`)
+    p = fetchJson<VotingDetail>(`/votings/s${sitting}/${voting}.json`).then((v) => {
+      if (v == null && detailCache.get(key) === p) detailCache.delete(key)
+      return v
+    })
     detailCache.set(key, p)
   }
   return p

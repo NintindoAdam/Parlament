@@ -32,6 +32,8 @@ export function useVotingSelection(enabled: boolean, onRestoreFromUrl?: () => vo
   const [detailLoading, setDetailLoading] = useState(false)
   const [failed, setFailed] = useState(false)
   const [restored, setRestored] = useState(false)
+  // Zwiększany przez retry(), by wymusić ponowne pobranie indeksu/szczegółów.
+  const [reloadKey, setReloadKey] = useState(0)
 
   // Odtworzenie wyboru z URL (raz, przy montowaniu).
   useEffect(() => {
@@ -80,7 +82,7 @@ export function useVotingSelection(enabled: boolean, onRestoreFromUrl?: () => vo
     return () => {
       cancelled = true
     }
-  }, [enabled, sitting])
+  }, [enabled, sitting, reloadKey])
 
   // Szczegóły wybranego głosowania.
   useEffect(() => {
@@ -100,7 +102,7 @@ export function useVotingSelection(enabled: boolean, onRestoreFromUrl?: () => vo
     return () => {
       cancelled = true
     }
-  }, [enabled, sitting, votingNum])
+  }, [enabled, sitting, votingNum, reloadKey])
 
   /** Czy szczegóły to głosowanie listowe z pełnym rozbiciem na opcje? */
   const hasOptions = !!(
@@ -156,6 +158,12 @@ export function useVotingSelection(enabled: boolean, onRestoreFromUrl?: () => vo
     })
   }
 
+  /** Ponów pobranie indeksu posiedzenia / szczegółów po błędzie sieci. */
+  function retry() {
+    setFailed(false)
+    setReloadKey((k) => k + 1)
+  }
+
   return {
     manifest,
     manifestFailed,
@@ -172,5 +180,6 @@ export function useVotingSelection(enabled: boolean, onRestoreFromUrl?: () => vo
     detail,
     detailLoading,
     failed,
+    retry,
   }
 }

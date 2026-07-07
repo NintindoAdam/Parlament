@@ -115,9 +115,16 @@ export function MPVoteChecker({ mpId, mpName }: MPVoteCheckerProps) {
           </div>
 
           {sel.failed ? (
-            <p className="mt-3 rounded-xl border border-black/10 bg-white/70 px-4 py-2.5 text-center text-xs text-ink-muted">
-              Nie udało się pobrać danych głosowania — spróbuj ponownie za chwilę.
-            </p>
+            <div className="mt-3 rounded-xl border border-black/10 bg-white/70 px-4 py-2.5 text-center">
+              <p className="text-xs text-ink-muted">Nie udało się pobrać danych głosowania.</p>
+              <button
+                type="button"
+                onClick={sel.retry}
+                className="mt-2 rounded-lg bg-ink px-3.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-ink-soft"
+              >
+                Spróbuj ponownie
+              </button>
+            </div>
           ) : null}
 
           <div className="mt-6">
