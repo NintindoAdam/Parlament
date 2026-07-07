@@ -1,22 +1,16 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { ClubCount, SeatDatum } from '@/lib/types'
 import {
   expandListVotes,
   expandVotes,
-  fetchSittingIndex,
-  fetchVotingDetail,
-  fetchVotingsManifest,
-  formatVoteParam,
   LIST_OPTION_LABELS,
-  parseVoteParam,
   VOTE_META,
-  type SittingIndex,
   type VotingDetail,
-  type VotingsManifest,
 } from '@/lib/votings'
 import { ParliamentMap, type VoteView } from './ParliamentMap'
+import { useVotingSelection } from './useVotingSelection'
 import { VotingPicker } from './VotingPicker'
 
 type Mode = 'clubs' | 'votes'
@@ -37,141 +31,19 @@ interface VoteExplorerProps {
  */
 export function VoteExplorer(props: VoteExplorerProps) {
   const [mode, setMode] = useState<Mode>('clubs')
-  const [manifest, setManifest] = useState<VotingsManifest | null>(null)
-  const [manifestFailed, setManifestFailed] = useState(false)
-  const [sitting, setSitting] = useState<number | null>(null)
-  const [index, setIndex] = useState<SittingIndex | null>(null)
-  const [indexLoading, setIndexLoading] = useState(false)
-  const [votingNum, setVotingNum] = useState<number | null>(null)
-  // Wybrana opcja/kandydat w głosowaniu listowym (numer 1-based jako string).
-  const [option, setOption] = useState<string | null>(null)
-  const [detail, setDetail] = useState<VotingDetail | null>(null)
-  const [detailLoading, setDetailLoading] = useState(false)
-  const [failed, setFailed] = useState(false)
-  const [restored, setRestored] = useState(false)
-
-  // Odtworzenie z URL (?g=47-12). window.location.search zamiast
-  // useSearchParams — unika pułapki Suspense przy statycznym eksporcie.
-  useEffect(() => {
-    const raw = new URLSearchParams(window.location.search).get('g')
-    const parsed = raw ? parseVoteParam(raw) : null
-    if (parsed) {
-      setMode('votes')
-      setSitting(parsed.sitting)
-      setVotingNum(parsed.voting)
-      setOption(parsed.option)
-    }
-    setRestored(true)
-  }, [])
-
-  // Manifest pobierany leniwie przy wejściu w tryb głosowań.
-  useEffect(() => {
-    if (mode !== 'votes' || manifest) return
-    let cancelled = false
-    fetchVotingsManifest().then((m) => {
-      if (cancelled) return
-      if (!m) {
-        setManifestFailed(true)
-        return
-      }
-      setManifest(m)
-      setSitting((current) => current ?? m.sittings[0]?.num ?? null)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [mode, manifest])
-
-  // Indeks wybranego posiedzenia.
-  useEffect(() => {
-    if (mode !== 'votes' || sitting == null) return
-    let cancelled = false
-    setIndexLoading(true)
-    setFailed(false)
-    fetchSittingIndex(sitting).then((idx) => {
-      if (cancelled) return
-      setIndex(idx)
-      setIndexLoading(false)
-      if (!idx) setFailed(true)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [mode, sitting])
-
-  // Szczegóły wybranego głosowania.
-  useEffect(() => {
-    if (mode !== 'votes' || sitting == null || votingNum == null) {
-      setDetail(null)
-      return
-    }
-    let cancelled = false
-    setDetailLoading(true)
-    setFailed(false)
-    fetchVotingDetail(sitting, votingNum).then((d) => {
-      if (cancelled) return
-      setDetail(d)
-      setDetailLoading(false)
-      if (!d) setFailed(true)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [mode, sitting, votingNum])
-
-  /** Czy szczegóły to głosowanie listowe z pełnym rozbiciem na opcje? */
-  const hasOptions = !!(
-    detail &&
-    detail.options &&
-    detail.options.length > 0 &&
-    detail.votes.l &&
-    Object.keys(detail.votes.l).length > 0
-  )
-
-  // Domyślna opcja głosowania listowego: ta z największym poparciem.
-  useEffect(() => {
-    if (!hasOptions || !detail?.votes.l) return
-    const valid = option != null && detail.votes.l[option] !== undefined
-    if (valid) return
-    const best = Object.entries(detail.votes.l).sort((a, b) => b[1].length - a[1].length)[0]
-    setOption(best ? best[0] : null)
-  }, [detail, hasOptions, option])
-
-  // Synchronizacja URL.
-  useEffect(() => {
-    if (!restored) return
-    const url = new URL(window.location.href)
-    if (mode === 'votes' && sitting != null && votingNum != null) {
-      url.searchParams.set('g', formatVoteParam(sitting, votingNum, hasOptions ? option : null))
-    } else {
-      url.searchParams.delete('g')
-    }
-    window.history.replaceState(null, '', url)
-  }, [mode, sitting, votingNum, option, hasOptions, restored])
+  const sel = useVotingSelection(mode === 'votes', () => setMode('votes'))
 
   const voteView: VoteView | null = useMemo(() => {
-    if (mode !== 'votes' || !detail) return null
-    if (hasOptions && option != null) {
+    if (mode !== 'votes' || !sel.detail) return null
+    if (sel.hasOptions && sel.option != null) {
       return {
-        votes: expandListVotes(detail.votes, option),
-        kind: detail.kind,
+        votes: expandListVotes(sel.detail.votes, sel.option),
+        kind: sel.detail.kind,
         labels: LIST_OPTION_LABELS,
       }
     }
-    return { votes: expandVotes(detail.votes), kind: detail.kind }
-  }, [mode, detail, hasOptions, option])
-
-  function selectSitting(num: number) {
-    setSitting(num)
-    setVotingNum(null)
-    setOption(null)
-    setDetail(null)
-  }
-
-  function selectVoting(num: number) {
-    setVotingNum(num)
-    setOption(null)
-  }
+    return { votes: expandVotes(sel.detail.votes), kind: sel.detail.kind }
+  }, [mode, sel.detail, sel.hasOptions, sel.option])
 
   return (
     <div>
@@ -193,22 +65,13 @@ export function VoteExplorer(props: VoteExplorerProps) {
 
       {mode === 'votes' ? (
         <div className="mx-auto mb-6 max-w-3xl">
-          {manifestFailed ? (
-            <ErrorCard
-              message="Nie udało się wczytać listy głosowań."
-              onRetry={() => {
-                setManifestFailed(false)
-                fetchVotingsManifest(true).then((m) => {
-                  if (m) setManifest(m)
-                  else setManifestFailed(true)
-                })
-              }}
-            />
-          ) : !manifest ? (
+          {sel.manifestFailed ? (
+            <ErrorCard message="Nie udało się wczytać listy głosowań." onRetry={sel.retryManifest} />
+          ) : !sel.manifest ? (
             <div className="h-24 animate-pulse rounded-2xl bg-black/[0.05]" aria-hidden="true" />
           ) : (
             <>
-              {manifest.placeholder ? (
+              {sel.manifest.placeholder ? (
                 <p className="mb-3 rounded-xl border border-amber-300/60 bg-amber-50/80 px-4 py-2 text-center text-xs leading-relaxed text-amber-900">
                   Tryb demonstracyjny — głosowania są przykładowe. Realne dane pojawiają się po
                   synchronizacji przy publikacji.
@@ -218,11 +81,11 @@ export function VoteExplorer(props: VoteExplorerProps) {
                 <label className="block">
                   <span className="sr-only">Posiedzenie</span>
                   <select
-                    value={sitting ?? ''}
-                    onChange={(e) => selectSitting(Number(e.target.value))}
+                    value={sel.sitting ?? ''}
+                    onChange={(e) => sel.selectSitting(Number(e.target.value))}
                     className="w-full rounded-xl border border-black/10 bg-white/90 px-3 py-2.5 text-sm font-medium text-ink shadow-sm outline-none focus:border-ink/30"
                   >
-                    {manifest.sittings.map((s) => (
+                    {sel.manifest.sittings.map((s) => (
                       <option key={s.num} value={s.num}>
                         Posiedzenie {s.num} · {formatRange(s.firstDate, s.lastDate)} · {s.votings} głosowań
                       </option>
@@ -230,24 +93,24 @@ export function VoteExplorer(props: VoteExplorerProps) {
                   </select>
                 </label>
                 <VotingPicker
-                  votings={index?.votings ?? []}
-                  selected={votingNum}
-                  onSelect={selectVoting}
-                  loading={indexLoading}
+                  votings={sel.index?.votings ?? []}
+                  selected={sel.votingNum}
+                  onSelect={sel.selectVoting}
+                  loading={sel.indexLoading}
                 />
               </div>
 
-              {failed ? (
+              {sel.failed ? (
                 <p className="mt-3 rounded-xl border border-black/10 bg-white/70 px-4 py-2.5 text-center text-xs text-ink-muted">
                   Nie udało się pobrać danych głosowania — spróbuj ponownie za chwilę.
                 </p>
               ) : null}
 
-              {detail ? (
-                <VotingSummaryCard detail={detail} option={option} onSelectOption={setOption} />
-              ) : !failed ? (
+              {sel.detail ? (
+                <VotingSummaryCard detail={sel.detail} option={sel.option} onSelectOption={sel.setOption} />
+              ) : !sel.failed ? (
                 <p className="mt-3 text-center text-xs text-ink-muted">
-                  {detailLoading
+                  {sel.detailLoading
                     ? 'Wczytywanie głosowania…'
                     : 'Wybierz głosowanie, aby pokolorować salę głosami posłów.'}
                 </p>
@@ -397,7 +260,7 @@ function VotingSummaryCard({
   )
 }
 
-function formatRange(a: string, b: string): string {
+export function formatRange(a: string, b: string): string {
   const fmt = (iso: string) => {
     const [y, m, d] = iso.split('-')
     return `${d}.${m}.${y}`
@@ -406,7 +269,7 @@ function formatRange(a: string, b: string): string {
   return a === b || !b ? fmt(a) : `${fmt(a)}–${fmt(b)}`
 }
 
-function formatDateTime(iso: string): string {
+export function formatDateTime(iso: string): string {
   if (!iso) return ''
   const [date, time] = iso.split('T')
   const [y, m, d] = date.split('-')

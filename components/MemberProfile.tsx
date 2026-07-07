@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import type { AttendanceStats, ClubMeta, MP, WikiInfo } from '@/lib/types'
+import { MPVoteChecker } from './MPVoteChecker'
 import { Photo } from './Photo'
 
 interface AttendanceMeta {
@@ -100,6 +101,8 @@ export function MemberProfile({ mp, club, wiki, attendance, attendanceMeta }: Me
       {attendance && attendance.total > 0 ? (
         <VotingActivity attendance={attendance} meta={attendanceMeta} />
       ) : null}
+
+      <MPVoteChecker mpId={mp.id} mpName={mp.name} />
 
       {wiki ? (
         <section className="mt-6 rounded-3xl border border-black/5 bg-white/70 p-6 shadow-soft backdrop-blur-sm sm:p-8">
