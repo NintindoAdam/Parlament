@@ -170,7 +170,7 @@ async function writeSeedVotings(publicDir: string, mps: MP[]) {
       const majority = isList
         ? {}
         : {
-            majorityType: isAbsolute ? 'ABSOLUTE_MAJORITY' : 'SIMPLE_MAJORITY',
+            majorityType: isAbsolute ? 'ABSOLUTE_STATUTORY_MAJORITY' : 'SIMPLE_MAJORITY',
             ...(isAbsolute ? { majorityVotes: 231 } : {}),
             notParticipating: groups.x.length,
             totalVoted,

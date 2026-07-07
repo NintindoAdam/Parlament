@@ -116,13 +116,17 @@ export function computeOutcome(v: VotingSummary): VoteOutcome {
   }
 }
 
+// Rzeczywiste wartości `majorityType` z API Sejmu (kadencja 10) — potwierdzone
+// w logu CI: SIMPLE_MAJORITY, ABSOLUTE_MAJORITY, ABSOLUTE_STATUTORY_MAJORITY,
+// STATUTORY_MAJORITY, MAJORITY_THREE_FIFTHS. Pozostałe dodane profilaktycznie.
 const MAJORITY_LABELS: Record<string, string> = {
   SIMPLE_MAJORITY: 'większość zwykła',
   ABSOLUTE_MAJORITY: 'większość bezwzględna',
-  QUALIFIED_MAJORITY: 'większość kwalifikowana',
+  ABSOLUTE_STATUTORY_MAJORITY: 'większość bezwzględna ustawowej liczby posłów',
   STATUTORY_MAJORITY: 'większość ustawowej liczby posłów',
-  '2/3': 'większość kwalifikowana 2/3',
-  '3/5': 'większość kwalifikowana 3/5',
+  QUALIFIED_MAJORITY: 'większość kwalifikowana',
+  MAJORITY_THREE_FIFTHS: 'większość kwalifikowana 3/5',
+  MAJORITY_TWO_THIRDS: 'większość kwalifikowana 2/3',
 }
 
 /** Ludzka etykieta rodzaju większości (bez progu). */
