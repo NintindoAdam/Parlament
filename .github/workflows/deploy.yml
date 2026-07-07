@@ -38,12 +38,26 @@ jobs:
         id: pages
         uses: actions/configure-pages@v5
         with:
-          # Włącza/przełącza Pages na tryb „GitHub Actions" automatycznie przez API
-          # (wymaga uprawnienia pages: write). Dzięki temu nie trzeba ręcznie zmieniać
-          # źródła w ustawieniach repozytorium — to naprawia problem z README na stronie.
+          # Tworzy stronę Pages, jeśli nie istnieje (wymaga pages: write).
           enablement: true
           # UWAGA: świadomie NIE używamy `static_site_generator: next`, bo ta opcja
           # przepisuje next.config i psuje plik .mjs. basePath ustawiamy ręcznie poniżej.
+
+      # enablement tworzy stronę, ale NIE przełącza istniejącej z trybu
+      # „Deploy from a branch" — a wtedy przy każdym pushu builder Jekylla
+      # publikuje README i ściga się z naszym deployem (kto ostatni, ten wygrywa).
+      # Wymuszenie build_type=workflow wyłącza builder Jekylla na stałe
+      # i samonaprawia konfigurację przy każdym uruchomieniu.
+      - name: Wymuś publikowanie wyłącznie przez GitHub Actions
+        run: |
+          code=$(curl -sS -o /tmp/pages-resp.json -w "%{http_code}" -X PUT \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/pages" \
+            -d '{"build_type":"workflow"}')
+          echo "PUT /pages -> HTTP $code"
+          if [ "$code" != "204" ]; then cat /tmp/pages-resp.json; fi
+          # 204 = przełączono; inne kody logujemy, ale nie przerywamy deployu.
 
       - name: Instalacja zależności
         run: npm ci
