@@ -32,7 +32,7 @@ const CACHE_DIR = path.join(ROOT, 'data', 'votings-cache')
 const ATTENDANCE_FILE = path.join(ROOT, 'data', 'attendance.json')
 const OUT_DIR = path.join(ROOT, 'public', 'votings')
 
-const CACHE_SCHEMA = 3
+const CACHE_SCHEMA = 4
 const TITLE_MAX = 300
 const TOPIC_MAX = 200
 const OPTION_MAX = 120
@@ -53,6 +53,10 @@ interface VotingRecord {
   title: string
   topic: string
   kind: string
+  majorityType?: string
+  majorityVotes?: number
+  notParticipating?: number
+  totalVoted?: number
   /** Opisy opcji głosowania listowego (indeks 0 = opcja „1"). */
   options?: string[]
   votes: GroupedVotes
@@ -65,7 +69,14 @@ interface SittingCache {
   votings: VotingRecord[]
 }
 
-interface VotingListItem {
+interface MajorityFields {
+  majorityType?: string
+  majorityVotes?: number
+  notParticipating?: number
+  totalVoted?: number
+}
+
+interface VotingListItem extends MajorityFields {
   votingNumber?: number
   date?: string
   title?: string
@@ -74,7 +85,7 @@ interface VotingListItem {
   kind?: string
 }
 
-interface VotingDetailApi {
+interface VotingDetailApi extends MajorityFields {
   date?: string
   title?: string
   topic?: string
@@ -188,6 +199,14 @@ async function fetchSitting(sitting: number): Promise<SittingCache> {
       kind: detail.kind ?? item.kind ?? 'ELECTRONIC',
       votes: groups,
     }
+    const majorityType = detail.majorityType ?? item.majorityType
+    const majorityVotes = detail.majorityVotes ?? item.majorityVotes
+    const notParticipating = detail.notParticipating ?? item.notParticipating
+    const totalVoted = detail.totalVoted ?? item.totalVoted
+    if (majorityType) record.majorityType = majorityType
+    if (typeof majorityVotes === 'number') record.majorityVotes = majorityVotes
+    if (typeof notParticipating === 'number') record.notParticipating = notParticipating
+    if (typeof totalVoted === 'number') record.totalVoted = totalVoted
     if (options.length > 0) record.options = options
     votings.push(record)
   })
@@ -259,6 +278,10 @@ async function emitPublic(sittings: SittingCache[], generatedAt: string): Promis
         no: v.votes.n.length,
         abstain: v.votes.a.length,
         absent: v.votes.x.length,
+        ...(v.majorityType ? { majorityType: v.majorityType } : {}),
+        ...(v.majorityVotes != null ? { majorityVotes: v.majorityVotes } : {}),
+        ...(v.notParticipating != null ? { notParticipating: v.notParticipating } : {}),
+        ...(v.totalVoted != null ? { totalVoted: v.totalVoted } : {}),
       })),
     }
     await fs.writeFile(path.join(dir, 'index.json'), JSON.stringify(index))
@@ -411,6 +434,44 @@ async function main() {
   if (onList > 0 && withOptions === 0) {
     console.warn('  ⚠ Żadne głosowanie listowe nie ma rozbicia na opcje — sprawdź kształt pola listVotes/votingOptions w API.')
   }
+
+  // Diagnostyka rodzajów większości + weryfikacja semantyki majorityVotes.
+  const typeStats = new Map<string, number>()
+  let withThreshold = 0
+  let typedNoThreshold = 0
+  for (const sc of sittings) {
+    for (const v of sc.votings) {
+      const t = v.majorityType ?? '(brak)'
+      typeStats.set(t, (typeStats.get(t) ?? 0) + 1)
+      if (typeof v.majorityVotes === 'number' && v.majorityVotes > 0) withThreshold++
+      else if (v.majorityType) typedNoThreshold++
+    }
+  }
+  const outcome = (v: VotingRecord): string => {
+    if (v.kind === 'ON_LIST') return '—'
+    if (typeof v.majorityVotes === 'number' && v.majorityVotes > 0)
+      return v.votes.y.length >= v.majorityVotes ? 'PRZYJĘTO' : 'ODRZUCONO'
+    if (v.majorityType === 'SIMPLE_MAJORITY') return v.votes.y.length > v.votes.n.length ? 'PRZYJĘTO' : 'ODRZUCONO'
+    if (v.majorityType === 'ABSOLUTE_MAJORITY')
+      return v.votes.y.length > v.votes.n.length + v.votes.a.length ? 'PRZYJĘTO' : 'ODRZUCONO'
+    return '?'
+  }
+  console.log(
+    `  Rodzaje większości: ${[...typeStats.entries()].map(([k, n]) => `${k}:${n}`).join(', ')}`
+  )
+  console.log(`  Z progiem majorityVotes: ${withThreshold}, z typem bez progu: ${typedNoThreshold}`)
+  // Przykłady głosowań o większości innej niż zwykła — do weryfikacji progów.
+  const nonSimple: string[] = []
+  for (const sc of sittings) {
+    for (const v of sc.votings) {
+      if (v.majorityType && v.majorityType !== 'SIMPLE_MAJORITY' && nonSimple.length < 6) {
+        nonSimple.push(
+          `s${sc.sitting}/${v.num} ${v.majorityType} próg=${v.majorityVotes ?? '?'} za=${v.votes.y.length} przeciw=${v.votes.n.length} wstrz=${v.votes.a.length} -> ${outcome(v)} | ${v.title.slice(0, 45)}`
+        )
+      }
+    }
+  }
+  if (nonSimple.length) console.log('  Przykłady (nie-zwykła większość):\n    ' + nonSimple.join('\n    '))
 }
 
 main().catch((err) => {

@@ -37,7 +37,17 @@ export interface VotingSummary {
   no: number
   abstain: number
   absent: number
+  /** Rodzaj większości z API Sejmu (SIMPLE_MAJORITY / ABSOLUTE_MAJORITY / …). */
+  majorityType?: string
+  /** Wymagany próg głosów „za" (policzony przez Sejm — koduje np. 231, 276). */
+  majorityVotes?: number
+  /** Liczba posłów nieuczestniczących w głosowaniu. */
+  notParticipating?: number
+  /** Liczba oddanych głosów (za+przeciw+wstrzymało). */
+  totalVoted?: number
 }
+
+export type VoteOutcome = 'passed' | 'rejected' | 'none' | 'unknown'
 
 export interface SittingIndex {
   sitting: number
@@ -81,6 +91,50 @@ export function expandListVotes(g: GroupedVotes, option: string): Record<number,
   for (const id of g.l?.[option] ?? []) out[id] = 'yes'
   for (const id of g.x ?? []) out[id] = 'absent'
   return out
+}
+
+/**
+ * Wynik głosowania z uwzględnieniem wymaganej większości.
+ *
+ * Priorytet: `majorityVotes` z API (autorytatywny próg policzony przez Sejm —
+ * poprawnie koduje np. 231 dla większości bezwzględnej ustawowej liczby posłów
+ * czy 276 dla 3/5). Dopiero w razie braku — reguły wg rodzaju większości.
+ * Nigdy nie zgadujemy: brak danych → 'unknown'.
+ */
+export function computeOutcome(v: VotingSummary): VoteOutcome {
+  if (v.kind === 'ON_LIST') return 'none'
+  if (typeof v.majorityVotes === 'number' && v.majorityVotes > 0) {
+    return v.yes >= v.majorityVotes ? 'passed' : 'rejected'
+  }
+  switch (v.majorityType) {
+    case 'SIMPLE_MAJORITY':
+      return v.yes > v.no ? 'passed' : 'rejected'
+    case 'ABSOLUTE_MAJORITY':
+      return v.yes > v.no + v.abstain ? 'passed' : 'rejected'
+    default:
+      return 'unknown'
+  }
+}
+
+const MAJORITY_LABELS: Record<string, string> = {
+  SIMPLE_MAJORITY: 'większość zwykła',
+  ABSOLUTE_MAJORITY: 'większość bezwzględna',
+  QUALIFIED_MAJORITY: 'większość kwalifikowana',
+  STATUTORY_MAJORITY: 'większość ustawowej liczby posłów',
+  '2/3': 'większość kwalifikowana 2/3',
+  '3/5': 'większość kwalifikowana 3/5',
+}
+
+/** Ludzka etykieta rodzaju większości (bez progu). */
+export function majorityLabel(type?: string): string | null {
+  if (!type) return null
+  return MAJORITY_LABELS[type] ?? type.toLowerCase().replace(/_/g, ' ')
+}
+
+export const OUTCOME_META: Record<Exclude<VoteOutcome, 'none'>, { label: string; tone: string }> = {
+  passed: { label: 'Przyjęto', tone: 'bg-emerald-100 text-emerald-800' },
+  rejected: { label: 'Odrzucono', tone: 'bg-rose-100 text-rose-800' },
+  unknown: { label: 'Wynik nieustalony', tone: 'bg-black/[0.06] text-ink-muted' },
 }
 
 /** Etykiety kategorii dla widoku opcji głosowania listowego. */

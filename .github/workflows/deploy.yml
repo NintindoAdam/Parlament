@@ -99,9 +99,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: data/votings-cache
-          key: votings-v3-${{ github.run_id }}
+          key: votings-v4-${{ github.run_id }}
           restore-keys: |
-            votings-v3-
+            votings-v4-
 
       - name: Głosowania (frekwencja + widok „Jak głosowali?")
         run: npm run sync:votings

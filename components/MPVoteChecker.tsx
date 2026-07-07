@@ -1,7 +1,7 @@
 'use client'
 
-import type { VoteCode, VotingDetail } from '@/lib/votings'
-import { formatDateTime, formatRange } from './VoteExplorer'
+import { computeOutcome, OUTCOME_META, type VoteCode, type VotingDetail } from '@/lib/votings'
+import { formatDateTime, formatRange, MajorityNote } from './VoteExplorer'
 import { useVotingSelection } from './useVotingSelection'
 import { VotingPicker } from './VotingPicker'
 import { VotingTerminal, type TerminalState } from './VotingTerminal'
@@ -138,6 +138,19 @@ export function MPVoteChecker({ mpId, mpName }: MPVoteCheckerProps) {
                   ? ' · poseł nie figurował wtedy na liście do głosowania'
                   : ''}
               </p>
+              {(() => {
+                const outcome = computeOutcome(sel.detail!)
+                return outcome !== 'none' ? (
+                  <span
+                    className={`mt-2 inline-block rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${OUTCOME_META[outcome].tone}`}
+                  >
+                    Wynik: {OUTCOME_META[outcome].label}
+                  </span>
+                ) : null
+              })()}
+              <div className="mt-1 flex justify-center">
+                <MajorityNote detail={sel.detail} />
+              </div>
             </div>
           ) : (
             <p className="mt-4 text-center text-xs text-ink-muted">

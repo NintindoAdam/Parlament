@@ -164,17 +164,33 @@ async function writeSeedVotings(publicDir: string, mps: MP[]) {
       }
 
       const date = `${sitting.dates[num <= 4 ? 0 : 1]}T${String(9 + num).padStart(2, '0')}:30:00`
+      // num 7 = demonstracja większości bezwzględnej ustawowej liczby posłów (231).
+      const isAbsolute = num === 7
+      const totalVoted = groups.y.length + groups.n.length + groups.a.length
+      const majority = isList
+        ? {}
+        : {
+            majorityType: isAbsolute ? 'ABSOLUTE_MAJORITY' : 'SIMPLE_MAJORITY',
+            ...(isAbsolute ? { majorityVotes: 231 } : {}),
+            notParticipating: groups.x.length,
+            totalVoted,
+          }
       const record: Record<string, unknown> = {
         sitting: sitting.num,
         num,
         date,
         title: isList
           ? `Głosowanie nr ${num} — wybór przewodniczącego (dane demonstracyjne)`
-          : `Głosowanie nr ${num} — pkt ${num}. porządku dziennego (druk demonstracyjny nr ${sitting.num * 100 + num})`,
+          : isAbsolute
+            ? `Głosowanie nr ${num} — zgoda na pociągnięcie posła do odpowiedzialności (dane demonstracyjne)`
+            : `Głosowanie nr ${num} — pkt ${num}. porządku dziennego (druk demonstracyjny nr ${sitting.num * 100 + num})`,
         topic: isList
           ? 'wybór z listy kandydatów (głosowanie listowe, dane demonstracyjne)'
-          : `przyjęcie ${num % 2 === 0 ? 'projektu ustawy' : 'poprawki'} — dane demonstracyjne`,
+          : isAbsolute
+            ? 'wniosek wymaga większości bezwzględnej ustawowej liczby posłów (dane demonstracyjne)'
+            : `przyjęcie ${num % 2 === 0 ? 'projektu ustawy' : 'poprawki'} — dane demonstracyjne`,
         kind: isList ? 'ON_LIST' : 'ELECTRONIC',
+        ...majority,
         votes: groups,
       }
       if (isList) record.options = ['Anna Przykładowa', 'Bartosz Demonstracyjny']
@@ -189,6 +205,7 @@ async function writeSeedVotings(publicDir: string, mps: MP[]) {
         no: groups.n.length,
         abstain: groups.a.length,
         absent: groups.x.length,
+        ...majority,
       })
     }
 

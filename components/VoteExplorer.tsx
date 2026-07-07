@@ -3,9 +3,12 @@
 import { useMemo, useState } from 'react'
 import type { ClubCount, SeatDatum } from '@/lib/types'
 import {
+  computeOutcome,
   expandListVotes,
   expandVotes,
   LIST_OPTION_LABELS,
+  majorityLabel,
+  OUTCOME_META,
   VOTE_META,
   type VotingDetail,
 } from '@/lib/votings'
@@ -180,7 +183,7 @@ function VotingSummaryCard({
     { label: VOTE_META.abstain.label, value: detail.votes.a.length, color: VOTE_META.abstain.color },
     { label: VOTE_META.absent.label, value: detail.votes.x.length, color: VOTE_META.absent.color },
   ]
-  const passed = detail.votes.y.length > detail.votes.n.length
+  const outcome = computeOutcome(detail)
 
   return (
     <div className="mt-3 animate-fade-in rounded-2xl border border-black/5 bg-white/80 p-4 shadow-soft sm:p-5">
@@ -245,19 +248,32 @@ function VotingSummaryCard({
                   {c.label}: <span className="font-semibold tabular-nums text-ink">{c.value}</span>
                 </span>
               ))}
-              <span
-                className={`ml-auto rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
-                  passed ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
-                }`}
-              >
-                {passed ? 'przyjęto' : 'odrzucono'}
-              </span>
+              {outcome !== 'none' ? (
+                <span className={`ml-auto rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${OUTCOME_META[outcome].tone}`}>
+                  {OUTCOME_META[outcome].label}
+                </span>
+              ) : null}
             </>
           )}
         </div>
       )}
+
+      {!isList ? <MajorityNote detail={detail} /> : null}
     </div>
   )
+}
+
+/** Drobny wiersz: rodzaj wymaganej większości + próg + liczba oddanych głosów. */
+export function MajorityNote({ detail }: { detail: VotingDetail }) {
+  const label = majorityLabel(detail.majorityType)
+  if (!label && detail.majorityVotes == null && detail.totalVoted == null) return null
+  const parts: string[] = []
+  if (label) parts.push(label)
+  if (typeof detail.majorityVotes === 'number' && detail.majorityVotes > 0)
+    parts.push(`wymagane ${detail.majorityVotes} głosów`)
+  if (typeof detail.totalVoted === 'number') parts.push(`oddano ${detail.totalVoted}`)
+  if (parts.length === 0) return null
+  return <p className="mt-2 text-[11px] text-ink-muted">{parts.join(' · ')}</p>
 }
 
 export function formatRange(a: string, b: string): string {
