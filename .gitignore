@@ -10,6 +10,7 @@ next-env.d.ts
 /public/photos
 /public/photos-mini
 /public/places
+/public/votings
 /data/places-cache
 /data/votings-cache
 /data/attendance.json

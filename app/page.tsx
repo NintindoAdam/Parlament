@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { ParliamentMap } from '@/components/ParliamentMap'
+import { VoteExplorer } from '@/components/VoteExplorer'
 import { getClubCounts, getClubMeta, getMeta, getSeating } from '@/lib/data'
 import type { SeatDatum } from '@/lib/types'
 
@@ -51,7 +51,7 @@ export default function HomePage() {
 
       {meta.placeholder ? <DemoBanner /> : null}
 
-      <ParliamentMap
+      <VoteExplorer
         width={layout.width}
         height={layout.height}
         seatRadius={layout.seatRadius}

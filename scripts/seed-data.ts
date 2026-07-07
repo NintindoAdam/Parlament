@@ -5,6 +5,7 @@
  */
 import { promises as fs } from 'fs'
 import path from 'path'
+import { clubOrder } from '../lib/clubs'
 import { generateSeed } from '../lib/seed'
 import { chunkKey, type PlaceTuple } from '../lib/places'
 import type { AttendanceFile, MP } from '../lib/types'
@@ -95,6 +96,106 @@ function buildSeedAttendance(mps: MP[]): AttendanceFile {
   }
 }
 
+/**
+ * Demonstracyjne głosowania dla widoku „Jak głosowali?": 3 posiedzenia × 8
+ * głosowań, deterministycznie (bez losowości). Kluby koalicyjne (order ≤ 7)
+ * głosują ZA na parzystych numerach, opozycja PRZECIW — i odwrotnie na
+ * nieparzystych; wzory modulo dają wstrzymania, nieobecności i „wyłamańców".
+ * Ósme głosowanie każdego posiedzenia jest listowe (ON_LIST).
+ */
+async function writeSeedVotings(publicDir: string, mps: MP[]) {
+  const votingsDir = path.join(publicDir, 'votings')
+  await fs.rm(votingsDir, { recursive: true, force: true })
+  await fs.mkdir(votingsDir, { recursive: true })
+
+  const sittings = [
+    { num: 3, dates: ['2026-05-20', '2026-05-22'] },
+    { num: 2, dates: ['2026-04-15', '2026-04-17'] },
+    { num: 1, dates: ['2026-03-10', '2026-03-12'] },
+  ]
+
+  const manifestSittings: { num: number; firstDate: string; lastDate: string; votings: number }[] = []
+
+  for (const sitting of sittings) {
+    const dir = path.join(votingsDir, `s${sitting.num}`)
+    await fs.mkdir(dir, { recursive: true })
+    const indexVotings: object[] = []
+
+    for (let num = 1; num <= 8; num++) {
+      const isList = num === 8
+      const groups = { y: [] as number[], n: [] as number[], a: [] as number[], x: [] as number[], v: [] as number[] }
+      const coalitionFor = num % 2 === 0
+
+      for (const mp of mps) {
+        if (!mp.active) continue
+        if (isList) {
+          if ((mp.id * 7 + num) % 23 === 0) groups.x.push(mp.id)
+          else groups.v.push(mp.id)
+          continue
+        }
+        if ((mp.id * 7 + num) % 23 === 0) {
+          groups.x.push(mp.id)
+          continue
+        }
+        if ((mp.id * 13 + num) % 17 === 0) {
+          groups.a.push(mp.id)
+          continue
+        }
+        const order = clubOrder(mp.club)
+        const isCoalition = order <= 7
+        let votesFor = order === 11 ? mp.id % 2 === 0 : isCoalition === coalitionFor
+        if ((mp.id * 31 + num) % 41 === 0) votesFor = !votesFor // wyłamaniec
+        ;(votesFor ? groups.y : groups.n).push(mp.id)
+      }
+
+      const date = `${sitting.dates[num <= 4 ? 0 : 1]}T${String(9 + num).padStart(2, '0')}:30:00`
+      const record = {
+        sitting: sitting.num,
+        num,
+        date,
+        title: `Głosowanie nr ${num} — pkt ${num}. porządku dziennego (druk demonstracyjny nr ${sitting.num * 100 + num})`,
+        topic: isList
+          ? 'wybór składu komisji (głosowanie listowe, dane demonstracyjne)'
+          : `przyjęcie ${num % 2 === 0 ? 'projektu ustawy' : 'poprawki'} — dane demonstracyjne`,
+        kind: isList ? 'ON_LIST' : 'ELECTRONIC',
+        votes: groups,
+      }
+      await fs.writeFile(path.join(dir, `${num}.json`), JSON.stringify(record))
+      indexVotings.push({
+        num,
+        date,
+        title: record.title,
+        topic: record.topic,
+        kind: record.kind,
+        yes: groups.y.length,
+        no: groups.n.length,
+        abstain: groups.a.length,
+        absent: groups.x.length,
+      })
+    }
+
+    await fs.writeFile(
+      path.join(dir, 'index.json'),
+      JSON.stringify({ sitting: sitting.num, votings: indexVotings })
+    )
+    manifestSittings.push({
+      num: sitting.num,
+      firstDate: sitting.dates[0],
+      lastDate: sitting.dates[1],
+      votings: 8,
+    })
+  }
+
+  const manifest = {
+    generatedAt: new Date('2026-06-01T00:00:00Z').toISOString(),
+    placeholder: true,
+    term: 10,
+    sittings: manifestSittings,
+  }
+  await fs.writeFile(path.join(votingsDir, 'manifest.json'), JSON.stringify(manifest, null, 2))
+  return sittings.length * 8
+}
+
 async function main() {
   const dataDir = path.join(process.cwd(), 'data')
   await fs.mkdir(dataDir, { recursive: true })
@@ -110,9 +211,13 @@ async function main() {
     JSON.stringify(buildSeedAttendance(mps), null, 2)
   )
 
-  const placesCount = await writeSeedPlaces(path.join(process.cwd(), 'public'))
+  const publicDir = path.join(process.cwd(), 'public')
+  const placesCount = await writeSeedPlaces(publicDir)
+  const votingsCount = await writeSeedVotings(publicDir, mps)
 
-  console.log(`✔ Zapisano dane demonstracyjne: ${mps.length} posłów, ${clubs.length} klubów, ${placesCount} miejscowości.`)
+  console.log(
+    `✔ Zapisano dane demonstracyjne: ${mps.length} posłów, ${clubs.length} klubów, ${placesCount} miejscowości, ${votingsCount} głosowań.`
+  )
   console.log('  Aby pobrać realne dane + zdjęcia, uruchom `npm run sync`, a pełny indeks miejscowości — `npm run sync:places`.')
 }
 

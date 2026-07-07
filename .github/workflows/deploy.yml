@@ -95,18 +95,26 @@ jobs:
 
       # Zakończone posiedzenia są niezmienne — cache sprawia, że kolejne deploye
       # pobierają tylko 2 najnowsze posiedzenia zamiast całej kadencji.
-      - name: Cache agregatów głosowań
+      - name: Cache głosowań (surowe dane per posiedzenie)
         uses: actions/cache@v4
         with:
           path: data/votings-cache
-          key: votings-v1-${{ github.run_id }}
+          key: votings-v2-${{ github.run_id }}
           restore-keys: |
-            votings-v1-
+            votings-v2-
 
-      - name: Frekwencja w głosowaniach
+      - name: Głosowania (frekwencja + widok „Jak głosowali?")
         run: npm run sync:votings
         env:
           SEJM_TERM: '10'
+
+      # Informacyjnie: czy API Sejmu wysyła nagłówki CORS (dowód pod ewentualne
+      # przyszłe pobieranie na żywo z przeglądarki zamiast plików statycznych).
+      - name: Sonda CORS API Sejmu (informacyjna)
+        run: |
+          curl -sSI -H "Origin: https://nintindoadam.github.io" \
+            "https://api.sejm.gov.pl/sejm/term10/votings/1/1" | grep -i "access-control-" \
+            || echo "BRAK nagłówków CORS"
 
       - name: Build (statyczny eksport)
         run: npm run build

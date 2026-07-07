@@ -1,14 +1,17 @@
 import Link from 'next/link'
 import type { SeatDatum } from '@/lib/types'
+import { VOTE_META, type VoteCode } from '@/lib/votings'
 import { Photo } from './Photo'
 
 interface SeatPreviewProps {
   seat: SeatDatum
   /** Pokaż przycisk przejścia do pełnego profilu (mobile / panel). */
   showButton?: boolean
+  /** Głos posła w aktualnie wybranym głosowaniu (tryb „Jak głosowali?"). */
+  vote?: VoteCode
 }
 
-export function SeatPreview({ seat, showButton = false }: SeatPreviewProps) {
+export function SeatPreview({ seat, showButton = false, vote }: SeatPreviewProps) {
   return (
     <div className="flex items-start gap-3">
       <Photo
@@ -22,9 +25,20 @@ export function SeatPreview({ seat, showButton = false }: SeatPreviewProps) {
         <p className="truncate font-display text-[15px] font-semibold leading-tight text-ink">
           {seat.name}
         </p>
-        <span className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-black/[0.04] px-2 py-0.5 text-xs font-medium text-ink-soft">
-          <span className="h-2 w-2 flex-none rounded-full" style={{ backgroundColor: seat.color }} />
-          <span className="truncate">{seat.clubName}</span>
+        <span className="mt-1 flex flex-wrap items-center gap-1.5">
+          <span className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-black/[0.04] px-2 py-0.5 text-xs font-medium text-ink-soft">
+            <span className="h-2 w-2 flex-none rounded-full" style={{ backgroundColor: seat.color }} />
+            <span className="truncate">{seat.clubName}</span>
+          </span>
+          {vote ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-black/[0.04] px-2 py-0.5 text-xs font-semibold text-ink">
+              <span
+                className="h-2 w-2 flex-none rounded-full"
+                style={{ backgroundColor: VOTE_META[vote].color }}
+              />
+              {VOTE_META[vote].label}
+            </span>
+          ) : null}
         </span>
         <dl className="mt-1.5 space-y-0.5 text-xs text-ink-muted">
           {seat.district ? (

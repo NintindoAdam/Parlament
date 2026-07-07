@@ -3,8 +3,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { ClubCount, SeatDatum } from '@/lib/types'
+import { VOTE_META, type VoteCode } from '@/lib/votings'
 import { ClubLegend } from './ClubLegend'
 import { SeatPreview } from './SeatPreview'
+import { VoteLegend } from './VoteLegend'
+
+/** Aktywny widok głosowania: mapa poseł → głos (tryb „Jak głosowali?"). */
+export interface VoteView {
+  votes: Record<number, VoteCode>
+  kind: string
+}
 
 interface ParliamentMapProps {
   width: number
@@ -13,13 +21,24 @@ interface ParliamentMapProps {
   hitRadius: number
   seats: SeatDatum[]
   clubs: ClubCount[]
+  /** Gdy ustawione, fotele kolorowane są głosami zamiast barw klubów. */
+  voteView?: VoteView | null
 }
 
-export function ParliamentMap({ width, height, seatRadius, hitRadius, seats, clubs }: ParliamentMapProps) {
+export function ParliamentMap({
+  width,
+  height,
+  seatRadius,
+  hitRadius,
+  seats,
+  clubs,
+  voteView = null,
+}: ParliamentMapProps) {
   const router = useRouter()
   const [hoveredId, setHoveredId] = useState<number | null>(null)
   const [selected, setSelected] = useState<SeatDatum | null>(null)
-  const [activeClub, setActiveClub] = useState<string | null>(null)
+  // Klucz grupy do wygaszania: kod klubu (tryb klubów) lub kod głosu (tryb głosowań).
+  const [activeGroup, setActiveGroup] = useState<string | null>(null)
   const [coarse, setCoarse] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -31,9 +50,17 @@ export function ParliamentMap({ width, height, seatRadius, hitRadius, seats, clu
     return () => mq.removeEventListener('change', update)
   }, [])
 
-  // Prefetch trasy profili dla płynnego przejścia po kliknięciu.
+  // Zmiana widoku (kluby ↔ głosowanie, inne głosowanie) czyści wygaszenie.
+  useEffect(() => {
+    setActiveGroup(null)
+  }, [voteView])
+
   const byId = useMemo(() => new Map(seats.map((s) => [s.id, s])), [seats])
   const hovered = hoveredId !== null ? byId.get(hoveredId) ?? null : null
+
+  const voteOf = (id: number): VoteCode => voteView?.votes[id] ?? 'none'
+  const groupOf = (s: SeatDatum): string => (voteView ? voteOf(s.id) : s.club)
+  const fillOf = (s: SeatDatum): string => (voteView ? VOTE_META[voteOf(s.id)].color : s.color)
 
   function activate(seat: SeatDatum) {
     if (coarse) {
@@ -46,11 +73,7 @@ export function ParliamentMap({ width, height, seatRadius, hitRadius, seats, clu
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_18rem] lg:items-start lg:gap-7">
       {/* Mapa */}
-      <div
-        ref={containerRef}
-        className="relative"
-        onMouseLeave={() => setHoveredId(null)}
-      >
+      <div ref={containerRef} className="relative" onMouseLeave={() => setHoveredId(null)}>
         <svg
           viewBox={`0 0 ${width} ${height}`}
           className="h-auto w-full select-none overflow-visible"
@@ -60,8 +83,9 @@ export function ParliamentMap({ width, height, seatRadius, hitRadius, seats, clu
           <Rostrum cx={width / 2} cy={height - 28} />
           {seats.map((s) => {
             const isHovered = hoveredId === s.id
-            const isDimmed = activeClub !== null && s.club !== activeClub
+            const isDimmed = activeGroup !== null && groupOf(s) !== activeGroup
             const r = isHovered ? seatRadius * 1.5 : seatRadius
+            const voteLabel = voteView ? `, głos: ${VOTE_META[voteOf(s.id)].label}` : ''
             return (
               <g key={s.id}>
                 {/* Widoczny kwadracik (mniejszy, z luką) — bez obsługi zdarzeń. */}
@@ -71,7 +95,7 @@ export function ParliamentMap({ width, height, seatRadius, hitRadius, seats, clu
                   width={r * 2}
                   height={r * 2}
                   rx={r * 0.34}
-                  fill={s.color}
+                  fill={fillOf(s)}
                   className="pointer-events-none transition-all duration-150"
                   style={{
                     opacity: isDimmed ? 0.2 : 1,
@@ -89,7 +113,7 @@ export function ParliamentMap({ width, height, seatRadius, hitRadius, seats, clu
                   fill="transparent"
                   tabIndex={0}
                   role="link"
-                  aria-label={`${s.name}, ${s.clubName}`}
+                  aria-label={`${s.name}, ${s.clubName}${voteLabel}`}
                   onMouseEnter={() => setHoveredId(s.id)}
                   onFocus={() => setHoveredId(s.id)}
                   onClick={() => activate(s)}
@@ -107,26 +131,63 @@ export function ParliamentMap({ width, height, seatRadius, hitRadius, seats, clu
         </svg>
 
         {/* Hover-card (desktop) */}
-        {!coarse && hovered ? <SeatTooltip seat={hovered} width={width} height={height} /> : null}
+        {!coarse && hovered ? (
+          <SeatTooltip
+            seat={hovered}
+            width={width}
+            height={height}
+            vote={voteView ? voteOf(hovered.id) : undefined}
+          />
+        ) : null}
       </div>
 
       {/* Legenda */}
       <div className="lg:sticky lg:top-20">
-        <ClubLegend clubs={clubs} total={seats.length} active={activeClub} onActivate={setActiveClub} />
+        {voteView ? (
+          <VoteLegend votes={expandForLegend(voteView, seats)} active={activeGroup} onActivate={setActiveGroup} />
+        ) : (
+          <ClubLegend clubs={clubs} total={seats.length} active={activeGroup} onActivate={setActiveGroup} />
+        )}
         <p className="mt-3 px-1 text-xs leading-relaxed text-ink-muted">
-          {coarse ? 'Dotknij miejsca, aby zobaczyć posła.' : 'Najedź na miejsce, aby zobaczyć posła. Kliknij, by otworzyć pełny profil.'}
+          {coarse
+            ? 'Dotknij miejsca, aby zobaczyć posła.'
+            : 'Najedź na miejsce, aby zobaczyć posła. Kliknij, by otworzyć pełny profil.'}
         </p>
       </div>
 
       {/* Panel dolny (mobile / dotyk) */}
       {coarse && selected ? (
-        <MobileSheet seat={selected} onClose={() => setSelected(null)} />
+        <MobileSheet
+          seat={selected}
+          vote={voteView ? voteOf(selected.id) : undefined}
+          onClose={() => setSelected(null)}
+        />
       ) : null}
     </div>
   )
 }
 
-function SeatTooltip({ seat, width, height }: { seat: SeatDatum; width: number; height: number }) {
+/**
+ * Głosy do legendy liczone po miejscach na sali (obecny skład) — posłowie
+ * spoza ówczesnego wykazu trafiają do kategorii „Poza wykazem".
+ */
+function expandForLegend(voteView: VoteView, seats: SeatDatum[]): Record<number, VoteCode> {
+  const out: Record<number, VoteCode> = {}
+  for (const s of seats) out[s.id] = voteView.votes[s.id] ?? 'none'
+  return out
+}
+
+function SeatTooltip({
+  seat,
+  width,
+  height,
+  vote,
+}: {
+  seat: SeatDatum
+  width: number
+  height: number
+  vote?: VoteCode
+}) {
   const leftPct = Math.min(86, Math.max(14, (seat.x / width) * 100))
   const topPct = (seat.y / height) * 100
   const below = topPct < 40
@@ -140,13 +201,21 @@ function SeatTooltip({ seat, width, height }: { seat: SeatDatum; width: number; 
       }}
     >
       <div className="rounded-2xl border border-black/5 bg-white/95 p-3 shadow-card backdrop-blur-md">
-        <SeatPreview seat={seat} />
+        <SeatPreview seat={seat} vote={vote} />
       </div>
     </div>
   )
 }
 
-function MobileSheet({ seat, onClose }: { seat: SeatDatum; onClose: () => void }) {
+function MobileSheet({
+  seat,
+  vote,
+  onClose,
+}: {
+  seat: SeatDatum
+  vote?: VoteCode
+  onClose: () => void
+}) {
   return (
     <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true">
       <button
@@ -157,7 +226,7 @@ function MobileSheet({ seat, onClose }: { seat: SeatDatum; onClose: () => void }
       />
       <div className="absolute inset-x-0 bottom-0 animate-fade-in rounded-t-3xl border-t border-black/10 bg-white p-5 pb-7 shadow-card">
         <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-black/15" />
-        <SeatPreview seat={seat} showButton />
+        <SeatPreview seat={seat} showButton vote={vote} />
       </div>
     </div>
   )
