@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import type { ClubCount, SeatDatum } from '@/lib/types'
 import { VOTE_META, voteLabel, type VoteCode } from '@/lib/votings'
 import { ClubLegend } from './ClubLegend'
+import { ClubVoteBreakdown } from './ClubVoteBreakdown'
 import { SeatPreview } from './SeatPreview'
 import { VoteLegend } from './VoteLegend'
 
@@ -63,6 +64,10 @@ export function ParliamentMap({
   const voteOf = (id: number): VoteCode => voteView?.votes[id] ?? 'none'
   const groupOf = (s: SeatDatum): string => (voteView ? voteOf(s.id) : s.club)
   const fillOf = (s: SeatDatum): string => (voteView ? VOTE_META[voteOf(s.id)].color : s.color)
+  // Klucze z prefiksem `club:` (rozbicie per klub w trybie głosowań) wygaszają
+  // po klubie; pozostałe — po grupie (kod głosu lub klub, zależnie od trybu).
+  const matchesGroup = (s: SeatDatum, group: string): boolean =>
+    group.startsWith('club:') ? s.club === group.slice(5) : groupOf(s) === group
 
   function activate(seat: SeatDatum) {
     if (coarse) {
@@ -85,7 +90,7 @@ export function ParliamentMap({
           <Rostrum cx={width / 2} cy={height - 28} />
           {seats.map((s) => {
             const isHovered = hoveredId === s.id
-            const isDimmed = activeGroup !== null && groupOf(s) !== activeGroup
+            const isDimmed = activeGroup !== null && !matchesGroup(s, activeGroup)
             const r = isHovered ? seatRadius * 1.5 : seatRadius
             const ariaVote = voteView ? `, głos: ${voteLabel(voteOf(s.id), voteView.labels)}` : ''
             return (
@@ -147,12 +152,21 @@ export function ParliamentMap({
       {/* Legenda */}
       <div className="lg:sticky lg:top-20">
         {voteView ? (
-          <VoteLegend
-            votes={expandForLegend(voteView, seats)}
-            labels={voteView.labels}
-            active={activeGroup}
-            onActivate={setActiveGroup}
-          />
+          <>
+            <VoteLegend
+              votes={expandForLegend(voteView, seats)}
+              labels={voteView.labels}
+              active={activeGroup}
+              onActivate={setActiveGroup}
+            />
+            <ClubVoteBreakdown
+              seats={seats}
+              votes={voteView.votes}
+              labels={voteView.labels}
+              active={activeGroup}
+              onActivate={setActiveGroup}
+            />
+          </>
         ) : (
           <ClubLegend clubs={clubs} total={seats.length} active={activeGroup} onActivate={setActiveGroup} />
         )}
