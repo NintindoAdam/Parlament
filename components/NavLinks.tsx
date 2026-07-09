@@ -10,6 +10,11 @@ const LINKS = [
     label: 'Kto mnie reprezentuje?',
     match: (p: string) => p.startsWith('/kto-mnie-reprezentuje') || p.startsWith('/okreg'),
   },
+  {
+    href: '/jak-powstaje-ustawa',
+    label: 'Jak powstaje ustawa?',
+    match: (p: string) => p.startsWith('/jak-powstaje-ustawa') || p.startsWith('/ustawa'),
+  },
 ]
 
 export function NavLinks() {

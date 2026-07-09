@@ -11,10 +11,14 @@ next-env.d.ts
 /public/photos-mini
 /public/places
 /public/votings
+/public/legislation
 /data/places-cache
 /data/votings-cache
 /data/attendance.json
 /data/votings-diag.txt
+/data/legislation
+/data/legislation-cache
+/data/legislation-diag.txt
 
 # misc
 .DS_Store

@@ -11,6 +11,7 @@
     "sync": "tsx scripts/sync-data.ts",
     "sync:places": "tsx scripts/sync-places.ts",
     "sync:votings": "tsx scripts/sync-votings.ts",
+    "sync:legislation": "tsx scripts/sync-legislation.ts",
     "seed": "tsx scripts/seed-data.ts"
   },
   "dependencies": {

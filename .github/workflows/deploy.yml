@@ -108,6 +108,21 @@ jobs:
         env:
           SEJM_TERM: '10'
 
+      # Procesy legislacyjne bywają aktualizowane — cache po changeDate,
+      # więc kolejne deploye pobierają tylko zmienione procesy.
+      - name: Cache procesów legislacyjnych
+        uses: actions/cache@v4
+        with:
+          path: data/legislation-cache
+          key: legislation-v1-${{ github.run_id }}
+          restore-keys: |
+            legislation-v1-
+
+      - name: Proces legislacyjny („Jak powstaje ustawa?")
+        run: npm run sync:legislation
+        env:
+          SEJM_TERM: '10'
+
       # Informacyjnie: czy API Sejmu wysyła nagłówki CORS (dowód pod ewentualne
       # przyszłe pobieranie na żywo z przeglądarki zamiast plików statycznych).
       - name: Sonda CORS API Sejmu (informacyjna)
@@ -134,6 +149,8 @@ jobs:
         run: |
           echo "===== DIAGNOSTYKA WIĘKSZOŚCI (sync:votings) ====="
           cat data/votings-diag.txt || echo "brak pliku diagnostyki"
+          echo "===== DIAGNOSTYKA LEGISLACJI (sync:legislation) ====="
+          cat data/legislation-diag.txt || echo "brak pliku diagnostyki"
           echo "===== KONIEC DIAGNOSTYKI ====="
 
   deploy:

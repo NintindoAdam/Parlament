@@ -8,6 +8,7 @@ import path from 'path'
 import { clubOrder } from '../lib/clubs'
 import { generateSeed } from '../lib/seed'
 import { chunkKey, type PlaceTuple } from '../lib/places'
+import type { ProcessRecord, ProcessSummary } from '../lib/legislation'
 import type { AttendanceFile, MP } from '../lib/types'
 
 /**
@@ -243,6 +244,108 @@ async function writeSeedVotings(publicDir: string, mps: MP[]) {
   return sittings.length * 8
 }
 
+/**
+ * Demonstracyjne procesy legislacyjne dla „Jak powstaje ustawa?". Obejmują
+ * różnych inicjatorów i statusy; jeden „uchwalony" ma finalVote wpięty w
+ * istniejące seedowe głosowanie (posiedzenie 3, głosowanie 2 → /?g=3-2).
+ */
+async function writeSeedLegislation(dataDir: string, publicDir: string): Promise<number> {
+  const legDataDir = path.join(dataDir, 'legislation')
+  const legPublicDir = path.join(publicDir, 'legislation')
+  await fs.mkdir(legDataDir, { recursive: true })
+  await fs.mkdir(legPublicDir, { recursive: true })
+
+  const records: ProcessRecord[] = [
+    {
+      num: '101',
+      title: 'Rządowy projekt ustawy o wsparciu odbiorców energii (dane demonstracyjne)',
+      description: 'Projekt dotyczy zamrożenia cen energii dla gospodarstw domowych — dane demonstracyjne.',
+      initiator: 'rzadowy',
+      startDate: '2026-03-11',
+      changeDate: '2026-05-25T12:00:00',
+      status: 'uchwalona',
+      steps: [
+        { stage: 'inicjatywa', date: '2026-03-11', decision: 'projekt wniesiony do Sejmu' },
+        { stage: 'i_czytanie', date: '2026-03-20', decision: 'skierowano do komisji' },
+        { stage: 'komisje', date: '2026-04-10', decision: 'sprawozdanie komisji' },
+        { stage: 'ii_czytanie', date: '2026-04-15' },
+        { stage: 'iii_czytanie_glosowanie', date: '2026-04-16', decision: 'ustawę uchwalono', vote: { sitting: 3, voting: 2 } },
+        { stage: 'senat', date: '2026-05-05', decision: 'przyjął bez poprawek' },
+        { stage: 'prezydent', date: '2026-05-20', decision: 'podpisał ustawę' },
+        { stage: 'publikacja', date: '2026-05-25', decision: 'ogłoszono w Dzienniku Ustaw' },
+      ],
+      finalVote: { sitting: 3, voting: 2 },
+      dziennikUstaw: 'Dz.U. 2026 poz. 512 (demo)',
+      printNums: ['101'],
+    },
+    {
+      num: '102',
+      title: 'Poselski projekt ustawy o zmianie ustawy — Prawo oświatowe (dane demonstracyjne)',
+      initiator: 'poselski',
+      startDate: '2026-04-02',
+      changeDate: '2026-04-18T09:00:00',
+      status: 'w_toku',
+      steps: [
+        { stage: 'inicjatywa', date: '2026-04-02', decision: 'projekt wniesiony do Sejmu' },
+        { stage: 'i_czytanie', date: '2026-04-12', decision: 'skierowano do komisji' },
+        { stage: 'komisje', date: '2026-04-18', decision: 'trwają prace w komisji' },
+      ],
+      printNums: ['102'],
+    },
+    {
+      num: '103',
+      title: 'Obywatelski projekt ustawy o ochronie zwierząt (dane demonstracyjne)',
+      initiator: 'obywatelski',
+      startDate: '2026-02-10',
+      changeDate: '2026-04-16T15:00:00',
+      status: 'odrzucona',
+      steps: [
+        { stage: 'inicjatywa', date: '2026-02-10', decision: 'projekt obywatelski (100 tys. podpisów)' },
+        { stage: 'i_czytanie', date: '2026-04-16', decision: 'projekt odrzucono w pierwszym czytaniu' },
+      ],
+      printNums: ['103'],
+    },
+    {
+      num: '104',
+      title: 'Senacki projekt ustawy o zmianie ustawy o samorządzie gminnym (dane demonstracyjne)',
+      initiator: 'senacki',
+      startDate: '2026-03-01',
+      changeDate: '2026-05-12T10:00:00',
+      status: 'zakonczona',
+      steps: [
+        { stage: 'inicjatywa', date: '2026-03-01', decision: 'inicjatywa Senatu' },
+        { stage: 'i_czytanie', date: '2026-03-14' },
+        { stage: 'komisje', date: '2026-04-05', decision: 'sprawozdanie komisji' },
+        { stage: 'ii_czytanie', date: '2026-04-20' },
+        { stage: 'iii_czytanie_glosowanie', date: '2026-04-22', decision: 'ustawę uchwalono', vote: { sitting: 2, voting: 4 } },
+        { stage: 'senat', date: '2026-05-06', decision: 'wprowadził poprawki' },
+        { stage: 'sejm_wobec_senatu', date: '2026-05-10', decision: 'Sejm przyjął część poprawek', vote: { sitting: 1, voting: 2 } },
+        { stage: 'prezydent', date: '2026-05-12', decision: 'skierował do Trybunału Konstytucyjnego' },
+      ],
+      finalVote: { sitting: 2, voting: 4 },
+      printNums: ['104'],
+    },
+  ]
+
+  for (const rec of records) {
+    await fs.writeFile(path.join(legDataDir, `${rec.num}.json`), JSON.stringify(rec, null, 2))
+  }
+  const summaries: ProcessSummary[] = records.map((r) => ({
+    num: r.num,
+    title: r.title,
+    initiator: r.initiator,
+    status: r.status,
+    startDate: r.startDate,
+    lastStage: r.steps[r.steps.length - 1].stage,
+  }))
+  await fs.writeFile(
+    path.join(legPublicDir, 'manifest.json'),
+    JSON.stringify({ generatedAt: new Date('2026-06-01T00:00:00Z').toISOString(), placeholder: true, term: 10, total: records.length }, null, 2)
+  )
+  await fs.writeFile(path.join(legPublicDir, 'list.json'), JSON.stringify(summaries, null, 2))
+  return records.length
+}
+
 async function main() {
   const dataDir = path.join(process.cwd(), 'data')
   await fs.mkdir(dataDir, { recursive: true })
@@ -261,9 +364,10 @@ async function main() {
   const publicDir = path.join(process.cwd(), 'public')
   const placesCount = await writeSeedPlaces(publicDir)
   const votingsCount = await writeSeedVotings(publicDir, mps)
+  const legislationCount = await writeSeedLegislation(dataDir, publicDir)
 
   console.log(
-    `✔ Zapisano dane demonstracyjne: ${mps.length} posłów, ${clubs.length} klubów, ${placesCount} miejscowości, ${votingsCount} głosowań.`
+    `✔ Zapisano dane demonstracyjne: ${mps.length} posłów, ${clubs.length} klubów, ${placesCount} miejscowości, ${votingsCount} głosowań, ${legislationCount} procesów legislacyjnych.`
   )
   console.log('  Aby pobrać realne dane + zdjęcia, uruchom `npm run sync`, a pełny indeks miejscowości — `npm run sync:places`.')
 }
