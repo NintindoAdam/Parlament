@@ -48,13 +48,16 @@ const TITLE_MAX = 400
 interface RawStage {
   stageName?: string
   name?: string
+  stageType?: string
   date?: string
   decision?: string
   comment?: string
   sitting?: number
+  sittingNum?: number
   votingNumber?: number
-  voting?: { sitting?: number; votingNumber?: number; number?: number }
-  votings?: { sitting?: number; votingNumber?: number; number?: number }[]
+  votingNum?: number
+  voting?: { sitting?: number; sittingNum?: number; votingNumber?: number; votingNum?: number; number?: number }
+  votings?: { sitting?: number; sittingNum?: number; votingNumber?: number; votingNum?: number; number?: number }[]
   children?: RawStage[]
 }
 
@@ -94,6 +97,41 @@ async function fetchJson<T>(url: string): Promise<T | null> {
   return null
 }
 
+/** Normalizuje odpowiedź /processes do tablicy (API bywa opakowane). */
+function asArray(raw: unknown): RawProcessListItem[] {
+  if (Array.isArray(raw)) return raw as RawProcessListItem[]
+  const o = raw as Record<string, unknown> | null
+  return ((o?.items ?? o?.processes ?? o?.data ?? []) as RawProcessListItem[]) ?? []
+}
+
+/**
+ * Pobiera pełną listę procesów. Endpoint /processes bywa ograniczony domyślnym
+ * limitem, więc stronicujemy przez ?limit&offset i deduplikujemy po numerze.
+ * Odporne na API, które ignoruje offset (przerywa, gdy nic nowego nie dochodzi).
+ */
+async function fetchAllProcesses(): Promise<RawProcessListItem[]> {
+  const LIMIT = 100
+  const seen = new Set<string>()
+  const all: RawProcessListItem[] = []
+  for (let offset = 0; offset <= 20000; offset += LIMIT) {
+    const page = asArray(await fetchJson<unknown>(`${API}/processes?limit=${LIMIT}&offset=${offset}`))
+    if (page.length === 0) break
+    let added = 0
+    for (const item of page) {
+      const num = item.number != null ? String(item.number) : ''
+      if (!num || seen.has(num)) continue
+      seen.add(num)
+      all.push(item)
+      added++
+    }
+    if (page.length < LIMIT) break // ostatnia (niepełna) strona
+    if (added === 0) break // API zignorowało offset — brak nowych rekordów
+  }
+  // Awaryjnie: gdyby stronicowanie zwróciło pustkę, spróbuj gołego endpointu.
+  if (all.length === 0) return asArray(await fetchJson<unknown>(`${API}/processes`))
+  return all
+}
+
 async function pool<T>(items: T[], size: number, worker: (item: T, i: number) => Promise<void>) {
   let i = 0
   const runners = Array.from({ length: Math.min(size, items.length) }, async () => {
@@ -121,12 +159,14 @@ function extractVote(stage: RawStage): VoteRef | undefined {
   const cand = [
     stage.voting,
     ...(stage.votings ?? []),
+    { sittingNum: stage.sittingNum, votingNum: stage.votingNum },
     { sitting: stage.sitting, votingNumber: stage.votingNumber },
   ]
   for (const c of cand) {
     if (!c) continue
-    const sitting = c.sitting
-    const voting = (c as { votingNumber?: number }).votingNumber ?? (c as { number?: number }).number
+    const src = c as { sitting?: number; sittingNum?: number; votingNumber?: number; votingNum?: number; number?: number }
+    const sitting = src.sittingNum ?? src.sitting
+    const voting = src.votingNum ?? src.votingNumber ?? src.number
     if (typeof sitting === 'number' && typeof voting === 'number') return { sitting, voting }
   }
   return undefined
@@ -229,15 +269,8 @@ async function main() {
   await fs.mkdir(DATA_DIR, { recursive: true })
 
   console.log(`→ Pobieranie listy procesów legislacyjnych (kadencja ${TERM})…`)
-  const listRaw = await fetchJson<unknown>(`${API}/processes`)
-  // API bywa opakowane — zaakceptuj tablicę albo {items|processes|data:[...]}.
-  const list: RawProcessListItem[] = Array.isArray(listRaw)
-    ? (listRaw as RawProcessListItem[])
-    : (((listRaw as Record<string, unknown>)?.items ??
-        (listRaw as Record<string, unknown>)?.processes ??
-        (listRaw as Record<string, unknown>)?.data ??
-        []) as RawProcessListItem[])
-  console.log(`  Procesów na liście: ${list.length} (typ odpowiedzi: ${Array.isArray(listRaw) ? 'tablica' : typeof listRaw})`)
+  const list = await fetchAllProcesses()
+  console.log(`  Procesów na liście (łącznie): ${list.length}`)
   if (list.length === 0) {
     // Nie blokuj całego deployu — wyemituj pustą listę i zapisz diagnostykę.
     await emitEmpty()
