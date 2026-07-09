@@ -42,7 +42,7 @@ const OUT_DIR = path.join(ROOT, 'public', 'legislation')
 const VOTINGS_DIR = path.join(ROOT, 'public', 'votings')
 const DIAG_FILE = path.join(ROOT, 'data', 'legislation-diag.txt')
 
-const CACHE_SCHEMA = 1
+const CACHE_SCHEMA = 2
 const TITLE_MAX = 400
 
 interface RawStage {
@@ -212,12 +212,27 @@ function mergeSteps(raw: CanonicalStep[]): CanonicalStep[] {
   return CANONICAL_ORDER.filter((s) => byStage.has(s)).map((s) => byStage.get(s)!)
 }
 
-function deriveStatus(steps: CanonicalStep[]): ProcessStatus {
-  const has = (s: CanonicalStage) => steps.some((x) => x.stage === s)
-  const decisions = steps.map((s) => (s.decision ?? '').toLowerCase()).join(' | ')
-  if (has('publikacja')) return 'uchwalona'
-  if (/odrzuc/.test(decisions) && !has('senat') && !has('prezydent')) return 'odrzucona'
-  if (has('prezydent')) return 'zakonczona'
+/** Wszystkie surowe nazwy etapów (z dziećmi), małymi literami — do statusu. */
+function allStageNames(stages: RawStage[], out: string[]) {
+  for (const st of stages) {
+    const n = (st.stageName ?? st.name ?? '').toLowerCase()
+    if (n) out.push(n)
+    if (st.children?.length) allStageNames(st.children, out)
+  }
+}
+
+/**
+ * Status procesu wyprowadzony z pełnej listy nazw etapów (API nie ma etapu
+ * „Publikacja"; ustawa jest prawem po podpisie Prezydenta).
+ */
+function deriveStatus(names: string[]): ProcessStatus {
+  const has = (re: RegExp) => names.some((n) => re.test(n))
+  if (has(/podpisał ustawę/)) return 'uchwalona'
+  if (has(/nie uchwalona ponownie/)) return 'odrzucona' // weto utrzymane
+  if (has(/wycofano/)) return 'zakonczona'
+  if (has(/weto/) || has(/trybuna/)) return 'zakonczona' // u Prezydenta/TK — w toku poza Sejmem
+  if (has(/odrzucono/) && !has(/senat/) && !has(/prezydent/)) return 'odrzucona' // odrzucono w czytaniu
+  if (has(/prezydent/)) return 'zakonczona'
   return 'w_toku'
 }
 
@@ -245,6 +260,15 @@ function normalize(detail: RawProcessDetail): ProcessRecord | null {
     return null
   }
 
+  const names: string[] = []
+  allStageNames(detail.stages ?? [], names)
+  const status = deriveStatus(names)
+  // API nie zwraca etapu „Publikacja", ale podpisana ustawa JEST ogłaszana —
+  // dodaj syntetyczny krok, by oś kończyła się poprawnie dla obowiązujących ustaw.
+  if (status === 'uchwalona' && !steps.some((s) => s.stage === 'publikacja')) {
+    steps.push({ stage: 'publikacja', decision: 'ustawa ogłoszona w Dzienniku Ustaw' })
+  }
+
   const glosowanie = steps.find((s) => s.stage === 'iii_czytanie_glosowanie')
   const prints = (detail.printNumbers ?? detail.prints?.map((p) => p.number) ?? [])
     .filter((p): p is string | number => p != null)
@@ -257,7 +281,7 @@ function normalize(detail: RawProcessDetail): ProcessRecord | null {
     initiator: deriveInitiator(title) as Initiator,
     startDate: (detail.processStartDate ?? '').slice(0, 10),
     changeDate: (detail.changeDate ?? detail.processStartDate ?? '').slice(0, 19),
-    status: deriveStatus(steps),
+    status,
     steps,
     finalVote: glosowanie?.vote,
     printNums: [...new Set([num, ...prints])],
