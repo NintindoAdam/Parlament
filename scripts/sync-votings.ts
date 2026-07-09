@@ -22,6 +22,7 @@ import { promises as fs } from 'fs'
 import { existsSync, readFileSync } from 'fs'
 import path from 'path'
 import type { AttendanceFile, AttendanceStats } from '../lib/types'
+import { isQuorumVoting } from '../lib/votings'
 
 const TERM = Number(process.env.SEJM_TERM ?? '10')
 const API = `https://api.sejm.gov.pl/sejm/term${TERM}`
@@ -329,6 +330,28 @@ async function main() {
       console.log(`  Posiedzenie ${num}: ${sc.votings.length} głosowań (cache)`)
     }
     sittings.push(sc)
+  }
+
+  // Odsiej głosowania kworum (proceduralne sprawdzenia obecności) — nie są
+  // głosowaniami merytorycznymi. Filtr działa na cache i świeżych danych, więc
+  // nie wymaga bumpu CACHE_SCHEMA. Przelicz lastVotingDate po usunięciu.
+  let removedQuorum = 0
+  for (const sc of sittings) {
+    const before = sc.votings.length
+    sc.votings = sc.votings.filter((v) => !isQuorumVoting(v))
+    removedQuorum += before - sc.votings.length
+    sc.lastVotingDate = sc.votings.reduce(
+      (m, v) => (v.date.slice(0, 10) > m ? v.date.slice(0, 10) : m),
+      ''
+    )
+  }
+  console.log(`  Odfiltrowano głosowań kworum: ${removedQuorum}`)
+  const leftoverQuorum = sittings.reduce(
+    (a, sc) => a + sc.votings.filter((v) => isQuorumVoting(v)).length,
+    0
+  )
+  if (leftoverQuorum > 0) {
+    console.warn(`  ⚠ Po filtrze pozostało ${leftoverQuorum} głosowań z „kworum" — sprawdź predykat.`)
   }
 
   const perMP = deriveAttendance(sittings)

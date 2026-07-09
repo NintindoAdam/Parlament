@@ -188,6 +188,16 @@ export function matchesVoting(v: VotingSummary, query: string): boolean {
   return foldText(`${v.title} ${v.topic}`).includes(q)
 }
 
+/**
+ * Głosowanie kworum — proceduralne sprawdzenie obecności, które API Sejmu
+ * zwraca obok realnych głosowań (title = nazwa posiedzenia, topic =
+ * „Głosowanie kworum", zerowe liczniki). Nie jest głosowaniem merytorycznym,
+ * więc odsiewamy je z listy, mapy i frekwencji.
+ */
+export function isQuorumVoting(v: { title: string; topic: string }): boolean {
+  return /kworum/i.test(v.topic) || /kworum/i.test(v.title)
+}
+
 // --- Memoizowane pobieranie -------------------------------------------------
 
 let manifestCache: Promise<VotingsManifest | null> | null = null

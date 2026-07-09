@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { matchesVoting, type VotingSummary } from '@/lib/votings'
+import { isQuorumVoting, matchesVoting, type VotingSummary } from '@/lib/votings'
 
 interface VotingPickerProps {
   votings: VotingSummary[]
@@ -22,8 +22,10 @@ export function VotingPicker({ votings, selected, onSelect, loading = false }: V
   const rootRef = useRef<HTMLDivElement>(null)
   const listId = useId()
 
-  const filtered = useMemo(() => votings.filter((v) => matchesVoting(v, query)), [votings, query])
-  const selectedVoting = selected != null ? votings.find((v) => v.num === selected) : undefined
+  // Obronnie odsiewamy głosowania kworum (na wypadek nieświeżego deployu danych).
+  const cleaned = useMemo(() => votings.filter((v) => !isQuorumVoting(v)), [votings])
+  const filtered = useMemo(() => cleaned.filter((v) => matchesVoting(v, query)), [cleaned, query])
+  const selectedVoting = selected != null ? cleaned.find((v) => v.num === selected) : undefined
 
   useEffect(() => {
     setActive(0)

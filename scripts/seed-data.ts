@@ -123,6 +123,9 @@ async function writeSeedVotings(publicDir: string, mps: MP[]) {
 
     for (let num = 1; num <= 8; num++) {
       const isList = num === 8
+      // num 6 = głosowanie kworum (proceduralne) — powinno zostać ODFILTROWANE
+      // z listy przez isQuorumVoting (test filtra obronnego w VotingPicker).
+      const isQuorum = num === 6
       const groups = {
         y: [] as number[],
         n: [] as number[],
@@ -136,6 +139,11 @@ async function writeSeedVotings(publicDir: string, mps: MP[]) {
 
       for (const mp of mps) {
         if (!mp.active) continue
+        if (isQuorum) {
+          // Kworum: wszyscy obecni figurują na liście, bez głosu merytorycznego.
+          groups.v.push(mp.id)
+          continue
+        }
         if (isList) {
           if ((mp.id * 7 + num) % 23 === 0) {
             groups.x.push(mp.id)
@@ -167,7 +175,7 @@ async function writeSeedVotings(publicDir: string, mps: MP[]) {
       // num 7 = demonstracja większości bezwzględnej ustawowej liczby posłów (231).
       const isAbsolute = num === 7
       const totalVoted = groups.y.length + groups.n.length + groups.a.length
-      const majority = isList
+      const majority = isList || isQuorum
         ? {}
         : {
             majorityType: isAbsolute ? 'ABSOLUTE_STATUTORY_MAJORITY' : 'SIMPLE_MAJORITY',
@@ -179,16 +187,20 @@ async function writeSeedVotings(publicDir: string, mps: MP[]) {
         sitting: sitting.num,
         num,
         date,
-        title: isList
-          ? `Głosowanie nr ${num} — wybór przewodniczącego (dane demonstracyjne)`
-          : isAbsolute
-            ? `Głosowanie nr ${num} — zgoda na pociągnięcie posła do odpowiedzialności (dane demonstracyjne)`
-            : `Głosowanie nr ${num} — pkt ${num}. porządku dziennego (druk demonstracyjny nr ${sitting.num * 100 + num})`,
-        topic: isList
-          ? 'wybór z listy kandydatów (głosowanie listowe, dane demonstracyjne)'
-          : isAbsolute
-            ? 'wniosek wymaga większości bezwzględnej ustawowej liczby posłów (dane demonstracyjne)'
-            : `przyjęcie ${num % 2 === 0 ? 'projektu ustawy' : 'poprawki'} — dane demonstracyjne`,
+        title: isQuorum
+          ? `${sitting.num}. posiedzenie Sejmu Rzeczypospolitej Polskiej (dane demonstracyjne)`
+          : isList
+            ? `Głosowanie nr ${num} — wybór przewodniczącego (dane demonstracyjne)`
+            : isAbsolute
+              ? `Głosowanie nr ${num} — zgoda na pociągnięcie posła do odpowiedzialności (dane demonstracyjne)`
+              : `Głosowanie nr ${num} — pkt ${num}. porządku dziennego (druk demonstracyjny nr ${sitting.num * 100 + num})`,
+        topic: isQuorum
+          ? 'Głosowanie kworum'
+          : isList
+            ? 'wybór z listy kandydatów (głosowanie listowe, dane demonstracyjne)'
+            : isAbsolute
+              ? 'wniosek wymaga większości bezwzględnej ustawowej liczby posłów (dane demonstracyjne)'
+              : `przyjęcie ${num % 2 === 0 ? 'projektu ustawy' : 'poprawki'} — dane demonstracyjne`,
         kind: isList ? 'ON_LIST' : 'ELECTRONIC',
         ...majority,
         votes: groups,
