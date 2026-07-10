@@ -12,6 +12,7 @@
     "sync:places": "tsx scripts/sync-places.ts",
     "sync:votings": "tsx scripts/sync-votings.ts",
     "sync:legislation": "tsx scripts/sync-legislation.ts",
+    "extract:konstytucja": "node scripts/extract-konstytucja.mjs",
     "seed": "tsx scripts/seed-data.ts"
   },
   "dependencies": {
