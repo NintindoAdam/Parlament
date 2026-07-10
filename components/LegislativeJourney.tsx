@@ -60,6 +60,48 @@ function Node({ stage, step }: { stage: CanonicalStage; step: number }) {
   )
 }
 
+/** Odgałęzienia procesu: etapy, na których projekt może skręcić (poprawki / odrzucenie). */
+const BRANCH: Partial<Record<CanonicalStage, { kind: 'reject' | 'amend'; label: string; why: string }>> = {
+  i_czytanie: { kind: 'reject', label: 'Może upaść', why: 'Sejm może odrzucić projekt już w I czytaniu — wtedy prace się kończą.' },
+  ii_czytanie: { kind: 'amend', label: 'Poprawki', why: 'Nowe poprawki cofają projekt do komisji, zanim wróci na salę.' },
+  iii_czytanie_glosowanie: { kind: 'reject', label: 'Może upaść', why: 'Bez wymaganej większości ustawa nie zostaje uchwalona.' },
+  senat: { kind: 'amend', label: 'Poprawki lub weto Senatu', why: 'Senat może zmienić lub odrzucić ustawę — wraca ona wtedy do Sejmu.' },
+  prezydent: { kind: 'reject', label: 'Weto lub Trybunał', why: 'Prezydent może zawetować ustawę albo skierować ją do Trybunału Konstytucyjnego.' },
+}
+
+const BRANCH_COLOR = { reject: '#e11d48', amend: '#d97706' } as const
+
+/** Odgałęzienie od kręgosłupa: przerywana linia + strzałka + wyjaśnienie „dlaczego". */
+function Branch({
+  info,
+  dir,
+}: {
+  info: { kind: 'reject' | 'amend'; label: string; why: string }
+  dir: 'left' | 'right'
+}) {
+  const color = BRANCH_COLOR[info.kind]
+  const rowReverse = dir === 'left' // gałąź w lewo → linia od kręgosłupa (prawa strania) w lewo
+  return (
+    <div className={`flex items-center gap-2 ${rowReverse ? 'flex-row-reverse' : ''}`}>
+      {/* Przerywana linia + grot strzałki */}
+      <svg width="34" height="12" viewBox="0 0 34 12" fill="none" aria-hidden="true" className="flex-none" style={{ transform: dir === 'left' ? 'scaleX(-1)' : undefined }}>
+        <line x1="0" y1="6" x2="26" y2="6" stroke={color} strokeWidth="2" strokeDasharray="3 3" strokeLinecap="round" />
+        <path d="M26 2l5 4-5 4" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+      </svg>
+      <div
+        className={`max-w-[11rem] rounded-xl border px-2.5 py-1.5 ${dir === 'left' ? 'text-right' : ''}`}
+        style={{ borderColor: `${color}55`, backgroundColor: `${color}0f` }}
+      >
+        <p className="text-[11px] font-bold" style={{ color }}>
+          {info.kind === 'reject' ? '✕ ' : '↩ '}
+          {info.label}
+        </p>
+        <p className="mt-0.5 text-[11px] leading-snug text-ink-muted">{info.why}</p>
+      </div>
+    </div>
+  )
+}
+
 function Card({ stage, side }: { stage: CanonicalStage; side: 'left' | 'right' }) {
   const m = STAGE_META[stage]
   return (
@@ -90,33 +132,55 @@ export function LegislativeJourney() {
         {CANONICAL_ORDER.map((stage, i) => {
           const left = i % 2 === 0
           const nextColor = i < last ? STAGE_META[CANONICAL_ORDER[i + 1]].color : STAGE_META[stage].color
+          const branch = BRANCH[stage]
+          // Gałąź trafia w pustą kolumnę po przeciwnej stronie karty.
+          const branchDir: 'left' | 'right' = left ? 'right' : 'left'
           return (
             <li
               key={stage}
-              className="grid grid-cols-[3rem_1fr] items-start gap-x-4 pb-8 last:pb-0 sm:grid-cols-[1fr_3rem_1fr] sm:gap-x-6"
+              className="grid grid-cols-[3rem_1fr] gap-x-4 pb-8 last:pb-0 sm:grid-cols-[1fr_3rem_1fr] sm:gap-x-6"
             >
-              {/* Kolumna węzła + gradientowy łącznik do następnego etapu */}
-              <div className="relative col-start-1 flex h-full justify-center sm:col-start-2">
+              {/* Kolumna węzła — ciągły gradientowy kręgosłup (łącznik na całą wysokość wiersza). */}
+              <div className="relative col-start-1 row-start-1 sm:col-start-2">
                 {i < last ? (
                   <span
                     aria-hidden="true"
-                    className="absolute left-1/2 top-8 h-full w-1 -translate-x-1/2 rounded-full"
-                    style={{ background: `linear-gradient(to bottom, ${STAGE_META[stage].color}, ${nextColor})`, opacity: 0.55 }}
+                    className="absolute left-1/2 top-6 h-full w-1 -translate-x-1/2 rounded-full"
+                    style={{ background: `linear-gradient(to bottom, ${STAGE_META[stage].color}, ${nextColor})`, opacity: 0.6 }}
                   />
                 ) : null}
-                <Node stage={stage} step={i + 1} />
+                <div className="flex justify-center">
+                  <Node stage={stage} step={i + 1} />
+                </div>
               </div>
 
               {/* Karta: mobile zawsze po prawej; desktop na przemian lewo/prawo */}
               <div
-                className={`col-start-2 ${
+                className={`col-start-2 row-start-1 ${
                   left ? 'sm:col-start-1 sm:flex sm:justify-end' : 'sm:col-start-3'
                 }`}
               >
-                <div className={left ? 'sm:max-w-sm' : 'sm:max-w-sm'}>
+                <div className="sm:max-w-sm">
                   <Card stage={stage} side={left ? 'left' : 'right'} />
+                  {/* Mobile: gałąź pod kartą (w tej samej kolumnie — kręgosłup pozostaje ciągły). */}
+                  {branch ? (
+                    <div className="mt-2 sm:hidden">
+                      <Branch info={branch} dir="right" />
+                    </div>
+                  ) : null}
                 </div>
               </div>
+
+              {/* Desktop: odgałęzienie w pustej kolumnie po przeciwnej stronie karty. */}
+              {branch ? (
+                <div
+                  className={`hidden pt-3 sm:row-start-1 sm:flex ${
+                    left ? 'sm:col-start-3 sm:justify-start' : 'sm:col-start-1 sm:justify-end'
+                  }`}
+                >
+                  <Branch info={branch} dir={branchDir} />
+                </div>
+              ) : null}
             </li>
           )
         })}
