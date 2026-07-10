@@ -60,27 +60,38 @@ function Node({ stage, step }: { stage: CanonicalStage; step: number }) {
   )
 }
 
-/** Odgałęzienia procesu: etapy, na których projekt może skręcić (poprawki / odrzucenie). */
-const BRANCH: Partial<Record<CanonicalStage, { kind: 'reject' | 'amend'; label: string; why: string }>> = {
+type BranchInfo = {
+  kind: 'reject' | 'amend' | 'review'
+  label: string
+  why: string
+  /** Rozgałęzienie na skutki (np. orzeczenie Trybunału): ✓ pozytywny / ✕ negatywny. */
+  outcomes?: { ok: boolean; text: string }[]
+}
+
+/** Odgałęzienia procesu: etapy, na których projekt może skręcić (poprawki / odrzucenie / kontrola). */
+const BRANCH: Partial<Record<CanonicalStage, BranchInfo>> = {
   i_czytanie: { kind: 'reject', label: 'Może upaść', why: 'Sejm może odrzucić projekt już w I czytaniu — wtedy prace się kończą.' },
   ii_czytanie: { kind: 'amend', label: 'Poprawki', why: 'Nowe poprawki cofają projekt do komisji, zanim wróci na salę.' },
   iii_czytanie_glosowanie: { kind: 'reject', label: 'Może upaść', why: 'Bez wymaganej większości ustawa nie zostaje uchwalona.' },
   senat: { kind: 'amend', label: 'Poprawki lub weto Senatu', why: 'Senat może zmienić lub odrzucić ustawę — wraca ona wtedy do Sejmu.' },
-  prezydent: { kind: 'reject', label: 'Weto lub Trybunał', why: 'Prezydent może zawetować ustawę albo skierować ją do Trybunału Konstytucyjnego.' },
+  prezydent: {
+    kind: 'review',
+    label: 'Trybunał Konstytucyjny',
+    why: 'Zamiast podpisać, Prezydent może zawetować ustawę (Sejm odrzuca weto większością 3/5) albo skierować ją do Trybunału Konstytucyjnego, by zbadał jej zgodność z Konstytucją:',
+    outcomes: [
+      { ok: true, text: 'Zgodna z Konstytucją → Prezydent podpisuje ustawę.' },
+      { ok: false, text: 'Niezgodna → ustawa nie wchodzi w życie.' },
+    ],
+  },
 }
 
-const BRANCH_COLOR = { reject: '#e11d48', amend: '#d97706' } as const
+const BRANCH_COLOR = { reject: '#e11d48', amend: '#d97706', review: '#4f46e5' } as const
+const BRANCH_MARK = { reject: '✕', amend: '↩', review: '⚖' } as const
 
 /** Odgałęzienie od kręgosłupa: przerywana linia + strzałka + wyjaśnienie „dlaczego". */
-function Branch({
-  info,
-  dir,
-}: {
-  info: { kind: 'reject' | 'amend'; label: string; why: string }
-  dir: 'left' | 'right'
-}) {
+function Branch({ info, dir }: { info: BranchInfo; dir: 'left' | 'right' }) {
   const color = BRANCH_COLOR[info.kind]
-  const rowReverse = dir === 'left' // gałąź w lewo → linia od kręgosłupa (prawa strania) w lewo
+  const rowReverse = dir === 'left' // gałąź w lewo → linia od kręgosłupa (prawa strona) w lewo
   return (
     <div className={`flex items-center gap-2 ${rowReverse ? 'flex-row-reverse' : ''}`}>
       {/* Przerywana linia + grot strzałki */}
@@ -89,14 +100,25 @@ function Branch({
         <path d="M26 2l5 4-5 4" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
       </svg>
       <div
-        className={`max-w-[11rem] rounded-xl border px-2.5 py-1.5 ${dir === 'left' ? 'text-right' : ''}`}
+        className={`rounded-xl border px-2.5 py-1.5 ${info.outcomes ? 'max-w-[13.5rem]' : 'max-w-[11rem]'} ${dir === 'left' ? 'text-right' : ''}`}
         style={{ borderColor: `${color}55`, backgroundColor: `${color}0f` }}
       >
         <p className="text-[11px] font-bold" style={{ color }}>
-          {info.kind === 'reject' ? '✕ ' : '↩ '}
-          {info.label}
+          {BRANCH_MARK[info.kind]} {info.label}
         </p>
         <p className="mt-0.5 text-[11px] leading-snug text-ink-muted">{info.why}</p>
+        {info.outcomes ? (
+          <ul className="mt-1.5 space-y-1 text-left">
+            {info.outcomes.map((o) => (
+              <li key={o.text} className="flex items-start gap-1.5 text-[11px] leading-snug">
+                <span className="font-bold" style={{ color: o.ok ? '#059669' : '#e11d48' }} aria-hidden="true">
+                  {o.ok ? '✓' : '✕'}
+                </span>
+                <span className="text-ink-soft">{o.text}</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </div>
     </div>
   )
