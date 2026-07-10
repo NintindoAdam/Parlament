@@ -3,8 +3,11 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { LegislativeTimeline } from '@/components/LegislativeTimeline'
 import {
+  daysStale,
   formatDate,
+  FREEZER_DAYS,
   INITIATOR_LABELS,
+  isFrozen,
   STATUS_META,
 } from '@/lib/legislation'
 import { getAllProcesses, getProcess } from '@/lib/legislation-data'
@@ -34,6 +37,10 @@ export default async function UstawaPage({ params }: { params: Promise<{ num: st
 
   const sejmUrl = `https://www.sejm.gov.pl/Sejm10.nsf/PrzebiegProc.xsp?nr=${proc.num}`
 
+  const lastActivity = proc.steps.reduce((m, s) => (s.date && s.date > m ? s.date : m), '') || proc.startDate
+  const nowISO = new Date().toISOString()
+  const frozen = isFrozen(proc.status, lastActivity, nowISO)
+
   return (
     <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6 sm:py-14">
       <Link
@@ -61,6 +68,16 @@ export default async function UstawaPage({ params }: { params: Promise<{ num: st
           {proc.startDate ? <>Wpłynął {formatDate(proc.startDate)}</> : null}
           {proc.dziennikUstaw ? <> · opublikowano: {proc.dziennikUstaw}</> : null}
         </p>
+        {frozen ? (
+          <div className="mt-3 flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3.5 py-2.5 text-xs leading-relaxed text-sky-900">
+            <span aria-hidden="true" className="text-sm">❄️</span>
+            <span>
+              <span className="font-semibold">W zamrażarce sejmowej.</span> Ten projekt jest w toku,
+              ale od {daysStale(lastActivity, nowISO)} dni (ostatni ruch: {formatDate(lastActivity)})
+              nie nadano mu dalszego biegu.
+            </span>
+          </div>
+        ) : null}
       </header>
 
       <section className="mt-8 rounded-3xl border border-black/5 bg-white/70 p-6 shadow-soft backdrop-blur-sm sm:p-8">

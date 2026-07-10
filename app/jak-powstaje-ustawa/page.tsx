@@ -1,8 +1,8 @@
 import type { Metadata } from 'next'
 import { LegislationSearch } from '@/components/LegislationSearch'
+import { LegislativeJourney } from '@/components/LegislativeJourney'
 import { Term } from '@/components/Term'
 import { getMeta } from '@/lib/data'
-import { CANONICAL_ORDER, STAGE_META } from '@/lib/legislation'
 
 export const metadata: Metadata = {
   title: 'Jak powstaje ustawa?',
@@ -27,34 +27,16 @@ export default function JakPowstajeUstawaPage() {
         </p>
       </section>
 
-      {/* Infografika: droga ustawy w 9 krokach */}
+      {/* Podróż ustawy — wizualna ścieżka od pomysłu do prawa */}
       <section aria-labelledby="droga-ustawy" className="mb-14">
-        <h2 id="droga-ustawy" className="mb-5 text-center font-display text-xl font-semibold tracking-tight text-ink">
-          Droga ustawy w 9 krokach
+        <h2 id="droga-ustawy" className="mb-1 text-center font-display text-xl font-semibold tracking-tight text-ink">
+          Podróż ustawy — krok po kroku
         </h2>
-        <ol className="grid gap-3 sm:grid-cols-2">
-          {CANONICAL_ORDER.map((stage, i) => {
-            const m = STAGE_META[stage]
-            return (
-              <li
-                key={stage}
-                className="flex gap-3 rounded-2xl border border-black/5 bg-white/70 p-4 shadow-soft"
-              >
-                <span
-                  aria-hidden="true"
-                  className="grid h-8 w-8 flex-none place-items-center rounded-full text-sm font-bold text-white"
-                  style={{ backgroundColor: m.color }}
-                >
-                  {i + 1}
-                </span>
-                <div className="min-w-0">
-                  <h3 className="font-display text-sm font-semibold text-ink">{m.label}</h3>
-                  <p className="mt-0.5 text-xs leading-relaxed text-ink-muted">{m.explain}</p>
-                </div>
-              </li>
-            )
-          })}
-        </ol>
+        <p className="mx-auto mb-8 max-w-md text-center text-sm leading-relaxed text-ink-muted">
+          Każdy projekt pokonuje tę samą drogę. Prześledź ją od pierwszej iskry pomysłu po dzień,
+          w którym prawo zaczyna obowiązywać.
+        </p>
+        <LegislativeJourney />
       </section>
 
       {/* Prawdziwe projekty */}

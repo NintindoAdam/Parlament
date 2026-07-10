@@ -21,6 +21,7 @@ import path from 'path'
 import {
   CANONICAL_ORDER,
   deriveInitiator,
+  isFrozen,
   mapRawStage,
   type CanonicalStage,
   type CanonicalStep,
@@ -195,6 +196,13 @@ function collectSteps(stages: RawStage[], out: CanonicalStep[]) {
   }
 }
 
+/** Najpóźniejsza data ruchu w procesie (ISO YYYY-MM-DD). */
+function lastStepDate(r: ProcessRecord): string {
+  let max = ''
+  for (const s of r.steps) if (s.date && s.date > max) max = s.date
+  return max || (r.changeDate || r.startDate || '').slice(0, 10)
+}
+
 /** Scala kroki do jednego na etap kanoniczny (ostatnia data/decyzja wygrywa). */
 function mergeSteps(raw: CanonicalStep[]): CanonicalStep[] {
   const byStage = new Map<CanonicalStage, CanonicalStep>()
@@ -356,14 +364,23 @@ async function main() {
   for (const rec of records) {
     await fs.writeFile(path.join(DATA_DIR, `${rec.num}.json`), JSON.stringify(rec))
   }
-  const summaries: ProcessSummary[] = records.map((r) => ({
-    num: r.num,
-    title: r.title,
-    initiator: r.initiator,
-    status: r.status,
-    startDate: r.startDate,
-    lastStage: r.steps[r.steps.length - 1]?.stage ?? 'inicjatywa',
-  }))
+  const nowISO = new Date().toISOString()
+  let frozenCount = 0
+  const summaries: ProcessSummary[] = records.map((r) => {
+    const lastActivityDate = lastStepDate(r)
+    const frozen = isFrozen(r.status, lastActivityDate, nowISO)
+    if (frozen) frozenCount++
+    return {
+      num: r.num,
+      title: r.title,
+      initiator: r.initiator,
+      status: r.status,
+      startDate: r.startDate,
+      lastStage: r.steps[r.steps.length - 1]?.stage ?? 'inicjatywa',
+      lastActivityDate,
+      frozen,
+    }
+  })
   const generatedAt = readGeneratedAt()
   await fs.writeFile(
     path.join(OUT_DIR, 'manifest.json'),
@@ -411,9 +428,12 @@ async function writeDiagnostics(records: ProcessRecord[]) {
   const initiatorCount = new Map<Initiator, number>()
   let withFinalVote = 0
   let resolvedFinalVote = 0
+  let frozen = 0
+  const nowISO = new Date().toISOString()
   for (const r of records) {
     statusCount.set(r.status, (statusCount.get(r.status) ?? 0) + 1)
     initiatorCount.set(r.initiator, (initiatorCount.get(r.initiator) ?? 0) + 1)
+    if (isFrozen(r.status, lastStepDate(r), nowISO)) frozen++
     if (r.finalVote) {
       withFinalVote++
       const f = path.join(VOTINGS_DIR, `s${r.finalVote.sitting}`, `${r.finalVote.voting}.json`)
@@ -435,6 +455,7 @@ async function writeDiagnostics(records: ProcessRecord[]) {
     `Odrzucone przy normalizacji — bez tytułu/num: ${rejNoTitle}, nie-ustawa: ${rejNoUstaw}, bez rozpoznanych etapów: ${rejNoSteps}`,
     `Statusy: ${[...statusCount.entries()].map(([k, n]) => `${k}:${n}`).join(', ')}`,
     `Inicjatorzy: ${[...initiatorCount.entries()].map(([k, n]) => `${k}:${n}`).join(', ')}`,
+    `W zamrażarce sejmowej (w toku, ≥90 dni bez ruchu): ${frozen}`,
     `finalVote: ${withFinalVote} (rozwiązane do istniejącego głosowania: ${resolvedFinalVote})`,
     `Nierozpoznane nazwy etapów: ${unknownStages.size}`,
     unknownStages.size

@@ -4,6 +4,8 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import {
   fetchLegislationList,
+  formatDate,
+  FREEZER_DAYS,
   INITIATOR_LABELS,
   matchesProcess,
   STAGE_META,
@@ -12,6 +14,7 @@ import {
   type ProcessStatus,
   type ProcessSummary,
 } from '@/lib/legislation'
+import { Term } from './Term'
 
 const STATUS_FILTERS: { key: ProcessStatus; label: string }[] = [
   { key: 'w_toku', label: 'W toku' },
@@ -31,6 +34,7 @@ export function LegislationSearch() {
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState<ProcessStatus | null>(null)
   const [initiator, setInitiator] = useState<Initiator | null>(null)
+  const [frozenOnly, setFrozenOnly] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -49,15 +53,18 @@ export function LegislationSearch() {
     return [...new Set(list.map((p) => p.initiator))]
   }, [list])
 
+  const frozenCount = useMemo(() => (list ? list.filter((p) => p.frozen).length : 0), [list])
+
   const filtered = useMemo(() => {
     if (!list) return []
     return list.filter(
       (p) =>
         matchesProcess(p, query) &&
         (!status || p.status === status) &&
-        (!initiator || p.initiator === initiator)
+        (!initiator || p.initiator === initiator) &&
+        (!frozenOnly || p.frozen)
     )
-  }, [list, query, status, initiator])
+  }, [list, query, status, initiator, frozenOnly])
 
   if (failed) {
     return (
@@ -118,6 +125,39 @@ export function LegislationSearch() {
         </div>
       ) : null}
 
+      {/* Wyróżniony filtr „Zamrażarka sejmowa" */}
+      {frozenCount > 0 ? (
+        <div className="mt-3">
+          <button
+            type="button"
+            onClick={() => setFrozenOnly((v) => !v)}
+            aria-pressed={frozenOnly}
+            className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-colors ${
+              frozenOnly
+                ? 'border-sky-400 bg-sky-500 text-white shadow-sm'
+                : 'border-sky-300/70 bg-sky-50 text-sky-800 hover:bg-sky-100'
+            }`}
+          >
+            <span aria-hidden="true">❄️</span>
+            Zamrażarka Sejmowa
+            <span
+              className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
+                frozenOnly ? 'bg-white/25 text-white' : 'bg-sky-200/70 text-sky-900'
+              }`}
+            >
+              {frozenCount}
+            </span>
+          </button>
+          {frozenOnly ? (
+            <p className="mt-2 max-w-xl text-xs leading-relaxed text-ink-muted">
+              <Term k="zamrażarka sejmowa">Zamrażarka sejmowa</Term> — projekty wniesione do{' '}
+              <Term k="laska marszałkowska">laski marszałkowskiej</Term>, które są w toku, ale od
+              ponad {FREEZER_DAYS} dni nie było w nich żadnego ruchu.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
       <p className="mt-4 text-xs text-ink-muted">
         {filtered.length === list.length
           ? `${list.length} ${plProjekty(list.length)} ustaw`
@@ -141,7 +181,14 @@ export function LegislationSearch() {
                 </span>
               </div>
               <h3 className="mt-1.5 text-sm font-semibold leading-snug text-ink">{p.title}</h3>
-              <p className="mt-0.5 text-xs text-ink-muted">Druk nr {p.num}</p>
+              <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                <p className="text-xs text-ink-muted">Druk nr {p.num}</p>
+                {p.frozen ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-800 ring-1 ring-inset ring-sky-200">
+                    ❄️ bez ruchu od {formatDate(p.lastActivityDate)}
+                  </span>
+                ) : null}
+              </div>
             </Link>
           </li>
         ))}

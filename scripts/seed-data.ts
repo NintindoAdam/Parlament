@@ -8,7 +8,7 @@ import path from 'path'
 import { clubOrder } from '../lib/clubs'
 import { generateSeed } from '../lib/seed'
 import { chunkKey, type PlaceTuple } from '../lib/places'
-import type { ProcessRecord, ProcessSummary } from '../lib/legislation'
+import { isFrozen, type ProcessRecord, type ProcessSummary } from '../lib/legislation'
 import type { AttendanceFile, MP } from '../lib/types'
 
 /**
@@ -325,19 +325,39 @@ async function writeSeedLegislation(dataDir: string, publicDir: string): Promise
       finalVote: { sitting: 2, voting: 4 },
       printNums: ['104'],
     },
+    {
+      num: '105',
+      title: 'Poselski projekt ustawy o zmianie ustawy o transporcie zbiorowym (dane demonstracyjne)',
+      description: 'Projekt wpłynął do laski marszałkowskiej, ale utknął — dane demonstracyjne.',
+      initiator: 'poselski',
+      startDate: '2025-09-18',
+      changeDate: '2025-10-02T09:00:00',
+      status: 'w_toku',
+      steps: [
+        { stage: 'inicjatywa', date: '2025-09-18', decision: 'projekt wniesiony do Sejmu' },
+        { stage: 'i_czytanie', date: '2025-10-02', decision: 'skierowano do komisji' },
+      ],
+      printNums: ['105'],
+    },
   ]
 
   for (const rec of records) {
     await fs.writeFile(path.join(legDataDir, `${rec.num}.json`), JSON.stringify(rec, null, 2))
   }
-  const summaries: ProcessSummary[] = records.map((r) => ({
-    num: r.num,
-    title: r.title,
-    initiator: r.initiator,
-    status: r.status,
-    startDate: r.startDate,
-    lastStage: r.steps[r.steps.length - 1].stage,
-  }))
+  const nowISO = '2026-06-01' // stała data odniesienia dla demonstracyjnej zamrażarki
+  const summaries: ProcessSummary[] = records.map((r) => {
+    const lastActivityDate = r.steps.reduce((m, s) => (s.date && s.date > m ? s.date : m), '') || r.startDate
+    return {
+      num: r.num,
+      title: r.title,
+      initiator: r.initiator,
+      status: r.status,
+      startDate: r.startDate,
+      lastStage: r.steps[r.steps.length - 1].stage,
+      lastActivityDate,
+      frozen: isFrozen(r.status, lastActivityDate, nowISO),
+    }
+  })
   await fs.writeFile(
     path.join(legPublicDir, 'manifest.json'),
     JSON.stringify({ generatedAt: new Date('2026-06-01T00:00:00Z').toISOString(), placeholder: true, term: 10, total: records.length }, null, 2)

@@ -200,6 +200,26 @@ export interface ProcessSummary {
   startDate: string
   /** Ostatni osiągnięty etap (kanoniczny) — do etykiety na kaflu. */
   lastStage: CanonicalStage
+  /** Data ostatniego ruchu w procesie (ISO, YYYY-MM-DD). */
+  lastActivityDate: string
+  /** „Zamrażarka sejmowa": w toku i bez ruchu od ≥ FREEZER_DAYS. */
+  frozen: boolean
+}
+
+/** Próg „zamrażarki sejmowej" — dni bez ruchu w projekcie będącym w toku. */
+export const FREEZER_DAYS = 90
+
+/** Liczba pełnych dni między ostatnim ruchem a datą odniesienia. */
+export function daysStale(lastActivityISO: string, nowISO: string): number {
+  const a = Date.parse(lastActivityISO.slice(0, 10))
+  const b = Date.parse(nowISO.slice(0, 10))
+  if (Number.isNaN(a) || Number.isNaN(b)) return 0
+  return Math.floor((b - a) / 86_400_000)
+}
+
+/** Czy projekt jest w „zamrażarce": w toku i bez ruchu od ≥ FREEZER_DAYS dni. */
+export function isFrozen(status: ProcessStatus, lastActivityISO: string, nowISO: string): boolean {
+  return status === 'w_toku' && !!lastActivityISO && daysStale(lastActivityISO, nowISO) >= FREEZER_DAYS
 }
 
 export interface LegislationManifest {

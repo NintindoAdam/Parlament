@@ -69,6 +69,16 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
     definition:
       'Okres między ogłoszeniem ustawy a jej wejściem w życie, dający czas na przygotowanie się do nowych przepisów.',
   },
+  'laska marszałkowska': {
+    term: 'laska marszałkowska',
+    definition:
+      'Symbol władzy Marszałka Sejmu. „Wnieść projekt do laski marszałkowskiej" znaczy: oficjalnie złożyć go w Sejmie, by rozpoczął swoją drogę.',
+  },
+  'zamrażarka sejmowa': {
+    term: 'zamrażarka sejmowa',
+    definition:
+      'Potoczne określenie projektów, które trafiły do Sejmu, ale nie nadano im dalszego biegu — leżą bez ruchu. Tu: projekty w toku, w których od ponad 90 dni nic się nie zdarzyło.',
+  },
 }
 
 export function lookupTerm(key: string): GlossaryEntry | undefined {
